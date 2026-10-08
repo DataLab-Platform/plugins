@@ -1,0 +1,4 @@
+jsonschema>=4.18
+packaging>=24.2
+pytest>=8
+PyYAML>=6
