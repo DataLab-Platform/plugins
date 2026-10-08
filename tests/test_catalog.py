@@ -124,7 +124,12 @@ releases:
     assert (tmp_path / "site" / release["url"]).read_bytes() == wheel[1]
     published = json.loads((tmp_path / "site" / "catalog.json").read_text("utf-8"))
     assert published["schema_version"] == 1
-    assert "Example" in (tmp_path / "site" / "index.html").read_text("utf-8")
+    page = (tmp_path / "site" / "index.html").read_text("utf-8")
+    assert 'data-tier="community" data-targets="desktop web"' in page
+    assert f'href="{release["url"]}" download>Download 1.0.0</a>' in page
+    assert ">Community</span>" in page
+    for name in catalog.PAGE_ASSETS:
+        assert (tmp_path / "site" / name).is_file()
 
 
 def test_missing_digest_reports_the_value_to_declare(
@@ -221,6 +226,49 @@ def test_revoked_plugin_is_listed_without_downloading_its_wheels(
     assert plugin["releases"] == [{"version": "1.0.0", "sha256": "a" * 64}]
     assert not (tmp_path / "site" / "wheels").exists()
     assert not served
+    page = (tmp_path / "site" / "index.html").read_text("utf-8")
+    assert '<p class="notice status-revoked">Malicious code</p>' in page
+    assert "No installable release" in page
+    assert "download>" not in page
+
+
+def test_page_escapes_metadata_read_from_wheels() -> None:
+    """Wheel summaries are untrusted and must not inject markup."""
+    page = catalog.render_index(
+        {
+            "generated_at": "2026-10-08T13:29:23+00:00",
+            "plugins": [
+                {
+                    "id": "io.github.someone.example",
+                    "name": "Camera & Detector",
+                    "tier": "community",
+                    "status": "active",
+                    "repository": "https://github.com/someone/example",
+                    "summary": '<script>alert("x")</script>',
+                    "keywords": ['"><img src=x>'],
+                    "releases": [],
+                }
+            ],
+        }
+    )
+
+    assert "<script>alert" not in page
+    assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;" in page
+    assert "<img src=x>" not in page
+    assert ">CD</span>" in page
+    assert "Camera &amp; Detector</a>" in page
+    assert "1 plugin<" in page
+    assert '<time datetime="2026-10-08T13:29:23+00:00">2026-10-08 13:29 UTC' in page
+
+
+def test_empty_catalog_page_invites_submissions() -> None:
+    """The page of an empty catalog links to the contribution guide."""
+    page = catalog.render_index(
+        {"generated_at": "2026-10-08T13:29:23+00:00", "plugins": []}
+    )
+
+    assert f'href="{catalog.CONTRIBUTING_URL}">Submit the first one' in page
+    assert 'class="card"' not in page
 
 
 @pytest.mark.parametrize(

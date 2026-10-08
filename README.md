@@ -4,10 +4,12 @@ Catalog of plugins for [DataLab](https://datalab-platform.com/) desktop and [Dat
 
 ## Installing a plugin
 
+In DataLab 1.4 or later, open **Plugins > Configure plugins...**, select the **Available plugins** tab and click **Install**: DataLab downloads the plugin and checks it against the catalog.
+
+To install a downloaded file instead (also with the standalone version of DataLab):
+
 1. Open <https://datalab-platform.com/plugins/> and download the wheel (`.whl`) of the plugin.
 2. In DataLab, open **Plugins > Configure plugins...**, go to the **Install plugins** tab and click **Install from file...**.
-
-This also works with the standalone (Windows installer) version of DataLab, from DataLab 1.4.
 
 A plugin runs with the same rights as DataLab: it may read and modify your files. Install only plugins from authors you trust. Being listed here does not mean that a plugin was audited.
 

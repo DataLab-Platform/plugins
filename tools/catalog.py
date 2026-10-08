@@ -22,6 +22,7 @@ import io
 import json
 import os
 import shutil
+import string
 import sys
 import urllib.error
 import urllib.parse
@@ -46,6 +47,21 @@ import wheels  # noqa: E402  (verbatim copy of datalab/plugins/wheels.py)
 ROOT = Path(__file__).resolve().parents[1]
 ENTRIES_DIR = ROOT / "plugins"
 SCHEMA_PATH = ROOT / "schema" / "plugin-entry.schema.json"
+PAGE_DIR = ROOT / "tools" / "page"
+PAGE_ASSETS = ("style.css", "catalog.js", "logo.svg", "favicon.ico")
+CONTRIBUTING_URL = (
+    "https://github.com/DataLab-Platform/plugins/blob/main/CONTRIBUTING.md"
+)
+CAPABILITY_LABELS = {
+    "application": "Application",
+    "processing": "Processing",
+    "io": "I/O",
+    "visualization": "Visualization",
+}
+TIER_DESCRIPTIONS = {
+    "official": "Maintained by the DataLab team",
+    "community": "Maintained by its author",
+}
 CATALOG_SCHEMA_VERSION = 1
 OFFICIAL_OWNER = "datalab-platform"
 OFFICIAL_ID_PREFIX = "org.datalab."
@@ -393,71 +409,140 @@ def write_site(output: Path, catalog: dict, files: Mapping[str, bytes]) -> None:
     )
     (output / "schema").mkdir(exist_ok=True)
     shutil.copy2(SCHEMA_PATH, output / "schema" / SCHEMA_PATH.name)
+    for name in PAGE_ASSETS:
+        shutil.copy2(PAGE_DIR / name, output / name)
     (output / "index.html").write_text(render_index(catalog), encoding="utf-8")
     (output / ".nojekyll").write_text("", encoding="utf-8")
 
 
+def _format_size(size: int) -> str:
+    """Return a human-readable file size."""
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.0f} kB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
+def _count_plugins(count: int) -> str:
+    return f"{count} plugin{'' if count == 1 else 's'}"
+
+
+def _render_card(plugin: dict) -> str:
+    """Return the HTML card of a catalog plugin."""
+    esc = html.escape
+    status, tier = plugin["status"], plugin["tier"]
+    installable = [
+        release
+        for release in plugin["releases"]
+        if "url" in release and "yanked" not in release
+    ]
+    latest = installable[0] if installable and status != "revoked" else None
+    targets = latest["targets"] if latest else []
+    capabilities = [
+        CAPABILITY_LABELS.get(name, name) for name in plugin.get("capabilities", [])
+    ]
+    keywords = plugin.get("keywords", [])
+    summary = plugin.get("summary", "")
+    searchable = " ".join(
+        [plugin["name"], plugin["id"], summary, *keywords, *capabilities, *targets]
+    ).lower()
+    words = [word for word in plugin["name"].split() if word[:1].isalnum()]
+    initials = "".join(word[0] for word in words[:2]).upper() or "?"
+    hue = int(hashlib.sha256(plugin["id"].encode()).hexdigest()[:4], 16) % 360
+
+    badges = [
+        f'<span class="badge tier-{esc(tier)}" '
+        f'title="{esc(TIER_DESCRIPTIONS.get(tier, ""))}">{esc(tier.title())}</span>'
+    ]
+    if status != "active":
+        badges.append(
+            f'<span class="badge status-{esc(status)}">{esc(status.title())}</span>'
+        )
+    badges += [f'<span class="chip">{esc(label)}</span>' for label in capabilities]
+    badges += [
+        f'<span class="chip target">{esc(target.title())}</span>' for target in targets
+    ]
+    body = [f'<div class="badges">{"".join(badges)}</div>']
+    if status != "active" and plugin.get("status_reason"):
+        body.append(
+            f'<p class="notice status-{esc(status)}">{esc(plugin["status_reason"])}</p>'
+        )
+    if summary:
+        body.append(f'<p class="summary">{esc(summary)}</p>')
+    if keywords:
+        items = "".join(f"<li>{esc(keyword)}</li>" for keyword in keywords)
+        body.append(f'<ul class="keywords" aria-label="Keywords">{items}</ul>')
+
+    foot = []
+    if latest:
+        meta = [f"Version {latest['version']}"]
+        if plugin.get("license"):
+            meta.append(plugin["license"])
+        meta.append(_format_size(latest["size"]))
+        if latest.get("requires_python"):
+            meta.append(f"Python {latest['requires_python']}")
+        foot.append(
+            '<p class="meta">'
+            + "".join(f"<span>{esc(item)}</span>" for item in meta)
+            + "</p>"
+        )
+        actions = [
+            f'<a class="button primary" href="{esc(latest["url"])}" download>'
+            f"Download {esc(latest['version'])}</a>"
+        ]
+    else:
+        actions = ['<span class="unavailable">No installable release</span>']
+    repository = plugin["repository"]
+    actions.append(f'<a class="button" href="{esc(repository)}">Source code</a>')
+    documentation = plugin.get("documentation", repository)
+    if documentation != repository:
+        actions.append(
+            f'<a class="button" href="{esc(documentation)}">Documentation</a>'
+        )
+    foot.append(f'<div class="actions">{"".join(actions)}</div>')
+    if latest:
+        foot.append(
+            '<details class="digest"><summary>SHA-256</summary>'
+            f"<code>{esc(latest['sha256'])}</code></details>"
+        )
+
+    return (
+        f'<article class="card" data-tier="{esc(tier)}" '
+        f'data-targets="{esc(" ".join(targets))}" data-search="{esc(searchable)}">'
+        '<header class="card-head">'
+        f'<span class="monogram" style="--hue: {hue}" aria-hidden="true">'
+        f"{esc(initials)}</span>"
+        f'<div><h2><a href="{esc(repository)}">{esc(plugin["name"])}</a></h2>'
+        f'<code class="plugin-id">{esc(plugin["id"])}</code></div>'
+        "</header>" + "".join(body) + f'<div class="card-foot">{"".join(foot)}</div>'
+        "</article>"
+    )
+
+
 def render_index(catalog: dict) -> str:
     """Return the HTML page listing the catalog plugins."""
-    rows = []
-    for plugin in catalog["plugins"]:
-        installable = [
-            release
-            for release in plugin["releases"]
-            if "url" in release and "yanked" not in release
-        ]
-        latest = installable[0] if installable else None
-        download = "&mdash;"
-        if latest and plugin["status"] != "revoked":
-            url, version = html.escape(latest["url"]), html.escape(latest["version"])
-            download = f'<a href="{url}">{version}</a>'
-        description = plugin.get("summary", plugin.get("status_reason", ""))
-        targets = ", ".join(latest["targets"]) if latest else ""
-        rows.append(
-            "<tr>"
-            f'<td><a href="{html.escape(plugin["repository"])}">'
-            f"{html.escape(plugin['name'])}</a><br><small>{html.escape(plugin['id'])}"
-            "</small></td>"
-            f"<td>{html.escape(description)}</td>"
-            f"<td>{html.escape(targets)}</td>"
-            f"<td>{html.escape(plugin['tier'])}<br><small>"
-            f"{html.escape(plugin['status'])}</small></td>"
-            f"<td>{download}</td>"
-            "</tr>"
+    plugins = catalog["plugins"]
+    if plugins:
+        cards = (
+            '<div class="grid">\n'
+            + "\n".join(_render_card(plugin) for plugin in plugins)
+            + "\n</div>"
         )
-    table = "\n".join(rows) or '<tr><td colspan="5">No plugin yet.</td></tr>'
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DataLab plugins</title>
-<style>
-body {{ font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 64rem; }}
-table {{ border-collapse: collapse; width: 100%; }}
-th, td {{ border-bottom: 1px solid #ddd; padding: .5rem; text-align: left; }}
-small {{ color: #666; }}
-</style>
-</head>
-<body>
-<h1>DataLab plugins</h1>
-<p>Download a wheel and install it in DataLab with <b>Plugins &gt; Configure
-plugins... &gt; Install plugins</b>. Plugins run with the same rights as DataLab:
-install only plugins from authors you trust. Machine-readable catalog:
-<a href="catalog.json">catalog.json</a>.
-Submit a plugin: <a href="https://github.com/DataLab-Platform/plugins">
-DataLab-Platform/plugins</a>.</p>
-<table>
-<thead><tr><th>Plugin</th><th>Description</th><th>Targets</th><th>Tier</th>
-<th>Download</th></tr></thead>
-<tbody>
-{table}
-</tbody>
-</table>
-<p><small>Updated {html.escape(catalog["generated_at"])}</small></p>
-</body>
-</html>
-"""
+    else:
+        cards = (
+            f'<p class="empty">No plugin yet. <a href="{CONTRIBUTING_URL}">'
+            "Submit the first one</a>.</p>"
+        )
+    generated = datetime.datetime.fromisoformat(catalog["generated_at"])
+    generated = generated.astimezone(datetime.timezone.utc)
+    template = string.Template((PAGE_DIR / "index.html").read_text(encoding="utf-8"))
+    return template.substitute(
+        cards=cards,
+        count=_count_plugins(len(plugins)),
+        updated=f"{generated:%Y-%m-%d %H:%M} UTC",
+        updated_iso=html.escape(catalog["generated_at"]),
+    )
 
 
 def report(catalog: dict) -> str:

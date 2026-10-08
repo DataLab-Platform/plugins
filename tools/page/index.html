@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Plugins for DataLab, checked and mirrored by the DataLab plugin catalog.">
+<title>DataLab plugins</title>
+<link rel="icon" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<script src="catalog.js" defer></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap header-bar">
+    <a class="brand" href="https://datalab-platform.com/">
+      <img src="logo.svg" alt="" width="40" height="40">
+      <span>DataLab</span>
+    </a>
+    <nav aria-label="Catalog links">
+      <a href="https://datalab-platform.com/en/features/advanced/plugins.html">Plugin documentation</a>
+      <a href="https://github.com/DataLab-Platform/plugins/blob/main/CONTRIBUTING.md">Submit a plugin</a>
+    </nav>
+  </div>
+  <div class="wrap hero">
+    <h1>DataLab plugins</h1>
+    <p>Extend DataLab with plugins from the DataLab team and the community. Each release is checked automatically (pure Python, open-source license, dependencies provided by DataLab) and mirrored here with its SHA-256 digest.</p>
+  </div>
+</header>
+
+<section class="wrap install" aria-labelledby="install-title">
+  <h2 id="install-title">How to install a plugin</h2>
+  <ol class="steps">
+    <li>
+      <strong>In DataLab 1.4 or later</strong>
+      <span>Open <b>Plugins &gt; Configure plugins...</b>, select the <b>Available plugins</b> tab and click <b>Install</b>. DataLab downloads the plugin and checks it against this catalog.</span>
+    </li>
+    <li>
+      <strong>From a downloaded file</strong>
+      <span>Download a wheel below, then click <b>Install from file...</b> in the <b>Install plugins</b> tab of the same dialog. This also works with the standalone version of DataLab.</span>
+    </li>
+  </ol>
+  <p class="trust">Plugins run with the same rights as DataLab: install only plugins from authors you trust. <b>Official</b> plugins are maintained by the DataLab team, <b>community</b> plugins by their authors. Being listed here does not mean that a plugin was audited.</p>
+</section>
+
+<main class="wrap">
+  <div class="toolbar" hidden>
+    <input type="search" id="search" placeholder="Search plugins" aria-label="Search plugins" autocomplete="off">
+    <div class="filters" role="group" aria-label="Maintainer">
+      <button type="button" data-filter="tier" data-value="" aria-pressed="true">All</button>
+      <button type="button" data-filter="tier" data-value="official" aria-pressed="false">Official</button>
+      <button type="button" data-filter="tier" data-value="community" aria-pressed="false">Community</button>
+    </div>
+    <div class="filters" role="group" aria-label="Target">
+      <button type="button" data-filter="target" data-value="" aria-pressed="true">All</button>
+      <button type="button" data-filter="target" data-value="desktop" aria-pressed="false">Desktop</button>
+      <button type="button" data-filter="target" data-value="web" aria-pressed="false">Web</button>
+    </div>
+  </div>
+  <p class="count" id="count" aria-live="polite">$count</p>
+$cards
+  <p class="empty" id="no-match" hidden>No plugin matches your search.</p>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>Updated <time datetime="$updated_iso">$updated</time> &middot; <a href="catalog.json">catalog.json</a> &middot; <a href="schema/plugin-entry.schema.json">Entry schema</a> &middot; <a href="https://github.com/DataLab-Platform/plugins">Catalog repository</a></p>
+    <p>&copy; DataLab Platform Developers</p>
+  </div>
+</footer>
+</body>
+</html>
