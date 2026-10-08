@@ -1,0 +1,8 @@
+id: org.datalab.camera-characterization
+name: "Camera & Detector Characterization"
+repository: https://github.com/DataLab-Platform/datalab-camera-characterization
+capabilities: [application, processing]
+keywords: [camera, detector, characterization]
+releases:
+  - version: 0.2.0
+    sha256: eadf9a309245e806bcea118996f3ed61886841891167ed70f529dcf945fb07d7

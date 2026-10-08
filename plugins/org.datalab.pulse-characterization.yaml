@@ -1,0 +1,8 @@
+id: org.datalab.pulse-characterization
+name: "Pulse & Transient Characterization"
+repository: https://github.com/DataLab-Platform/datalab-pulse-characterization
+capabilities: [application, processing]
+keywords: [pulse, transient, timing, stability]
+releases:
+  - version: 0.2.0
+    sha256: 24a45b6cf4bb67cbacab29288d91f943cd54f556f5db61d0554e69ccc723a53f
