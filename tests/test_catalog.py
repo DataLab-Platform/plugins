@@ -30,6 +30,7 @@ def make_wheel(
     entry_points: str = DESKTOP_AND_WEB,
     license_expression: str = "BSD-3-Clause",
     requires: tuple[str, ...] = ("datalab-platform>=1.4", "numpy>=1.22"),
+    requires_python: str = ">=3.9",
 ) -> tuple[str, bytes]:
     """Return the file name and content of a plugin wheel."""
     stem = f"{distribution.replace('-', '_')}-{version}"
@@ -39,7 +40,7 @@ def make_wheel(
         f"Version: {version}",
         "Summary: Example plugin",
         f"License-Expression: {license_expression}",
-        "Requires-Python: >=3.9",
+        f"Requires-Python: {requires_python}",
         *(f"Requires-Dist: {requirement}" for requirement in requires),
     ]
     buffer = io.BytesIO()
@@ -331,3 +332,48 @@ def test_wheels_must_install_on_the_latest_datalab(
         )
     with pytest.raises(catalog.CatalogError, match="already listed"):
         catalog.build_catalog(entries, HOST)
+
+
+@pytest.mark.parametrize(
+    ("requires_python", "error"),
+    [
+        (">=3.12", None),
+        (">=3.13", r"\(web, Python 3.12\)"),
+        ("<3.9", r"\(desktop, Python 3.9, 3.10, .*3.14\)"),
+    ],
+)
+def test_targets_are_checked_with_their_python_versions(
+    served: dict, tmp_path: Path, requires_python: str, error: str | None
+) -> None:
+    """Wheels are judged by the Python of each target, not by the CI interpreter."""
+    repository = "https://github.com/someone/example-plugin"
+    wheel = make_wheel(requires_python=requires_python)
+    digest = publish_on_github(served, repository, "v1.0.0", wheel)
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        "io.github.someone.example",
+        f"id: io.github.someone.example\nname: Example\nrepository: {repository}\n"
+        f"releases:\n  - version: 1.0.0\n    sha256: {digest}\n",
+    )
+
+    if error is None:
+        (plugin,) = catalog.build_catalog(entries, HOST)["plugins"]
+        assert plugin["releases"][0]["targets"] == ["desktop", "web"]
+        assert plugin["releases"][0]["requires_python"] == requires_python
+    else:
+        with pytest.raises(catalog.CatalogError, match=error):
+            catalog.build_catalog(entries, HOST)
+
+
+def test_wheels_module_is_a_verbatim_copy_of_datalab() -> None:
+    """The catalog must judge a wheel exactly as DataLab and DataLab-Web do."""
+    root = Path(__file__).resolve().parents[1]
+    upstream = root.parent / "DataLab" / "datalab" / "plugins" / "wheels.py"
+    if not upstream.is_file():
+        pytest.skip("no sibling DataLab checkout")
+
+    def read(path: Path) -> str:
+        return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+    assert read(root / "tools" / "wheels.py") == read(upstream)
