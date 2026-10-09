@@ -69,6 +69,12 @@ TARGET_GROUPS = (
     ("desktop", wheels.DESKTOP_ENTRY_POINT_GROUP),
     ("web", wheels.WEB_ENTRY_POINT_GROUP),
 )
+#: Python versions of each target: a wheel must install on at least one of them
+TARGET_PYTHONS = {
+    "desktop": ("3.9", "3.10", "3.11", "3.12", "3.13", "3.14"),
+    # Python of the Pyodide release used by DataLab-Web (Pyodide 0.26)
+    "web": ("3.12",),
+}
 #: OSI-approved licenses accepted in the catalog (SPDX identifiers)
 ALLOWED_LICENSES = frozenset(
     {
@@ -235,6 +241,29 @@ def _check_license(metadata: Message, label: str) -> str:
     raise CatalogError(f"{label}: the wheel declares no License-Expression metadata")
 
 
+def _inspect_for_target(
+    data: bytes, filename: str, target: str, group: str, available: Mapping[str, str]
+) -> dict:
+    """Inspect a wheel with the first Python version of a target that accepts it."""
+    pythons = TARGET_PYTHONS[target]
+    for python_version in pythons:
+        try:
+            return wheels.inspect_wheel(
+                data,
+                filename=filename,
+                entry_point_group=group,
+                available_distributions=available,
+                python_version=python_version,
+                marker_environment={
+                    "python_version": python_version,
+                    "python_full_version": f"{python_version}.0",
+                },
+            )
+        except wheels.WheelInspectionError as exc:
+            error = exc
+    raise CatalogError(f"{error} ({target}, Python {', '.join(pythons)})")
+
+
 def check_release(
     entry: dict, release: dict, available: Mapping[str, str]
 ) -> tuple[dict, dict, bytes]:
@@ -257,13 +286,10 @@ def check_release(
     try:
         for target, group in TARGET_GROUPS:
             if group in groups:
-                manifests[target] = wheels.inspect_wheel(
-                    data,
-                    filename=filename,
-                    entry_point_group=group,
-                    available_distributions=available,
+                manifests[target] = _inspect_for_target(
+                    data, filename, target, group, available
                 )
-    except wheels.WheelInspectionError as exc:
+    except CatalogError as exc:
         raise CatalogError(f"{label}: {exc}") from exc
     if not manifests:
         raise CatalogError(

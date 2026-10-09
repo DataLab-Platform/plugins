@@ -20,7 +20,7 @@ Any author may list a plugin by opening a pull request that adds one small YAML 
 ## How the catalog works
 
 - Each plugin is described by `plugins/<id>.yaml`, validated against [schema/plugin-entry.schema.json](schema/plugin-entry.schema.json).
-- For each release, the CI downloads the wheel from the GitHub release (or from PyPI), checks its SHA-256 digest against the entry, and inspects it without running its code, with the same rules as DataLab: pure-Python wheel, `datalab.plugins` (desktop) and/or `datalab.web_plugins` (web) entry points, dependencies provided by the latest DataLab release, OSI-approved license.
+- For each release, the CI downloads the wheel from the GitHub release (or from PyPI), checks its SHA-256 digest against the entry, and inspects it without running its code, with the same rules as DataLab: pure-Python wheel, `datalab.plugins` (desktop) and/or `datalab.web_plugins` (web) entry points, dependencies provided by the latest DataLab release, OSI-approved license. Python compatibility is checked per target: a desktop wheel must install on at least one Python version supported by DataLab (3.9 to 3.14), a web wheel on the Python of the Pyodide release used by DataLab-Web (3.12).
 - When a pull request is merged, the catalog is rebuilt and published: `catalog.json`, a copy of every wheel in `wheels/<sha256>/`, and a human-readable `index.html`. Wheels are downloaded again at each build and must still match the reviewed digests.
 - Plugins from DataLab-Platform repositories are marked **official**, others **community**. IDs starting with `org.datalab.` are reserved for official plugins.
 
@@ -37,4 +37,4 @@ python tools/catalog.py check
 python tools/catalog.py build --output site
 ```
 
-[tools/wheels.py](tools/wheels.py) is a verbatim copy of `datalab/plugins/wheels.py` from DataLab: update both together.
+[tools/wheels.py](tools/wheels.py) is a verbatim copy of `datalab/plugins/wheels.py` from DataLab: update both together. A test compares them when a sibling DataLab checkout is available. Update `TARGET_PYTHONS` in [tools/catalog.py](tools/catalog.py) when DataLab supports a new Python version or DataLab-Web moves to another Pyodide release.
