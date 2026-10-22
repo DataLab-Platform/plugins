@@ -168,6 +168,155 @@ def test_missing_digest_reports_the_value_to_declare(
         catalog.build_catalog(entries, HOST)
 
 
+def module_entry(served: dict, tmp_path: Path, source: bytes) -> tuple[Path, str]:
+    """Publish an unchanged Python file as an exact GitHub release asset."""
+    repository = "https://github.com/someone/single-file-plugin"
+    filename = "datalab_single_probe.py"
+    digest = publish_on_github(served, repository, "v1.0", (filename, source))
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        "io.github.someone.single",
+        f"""id: io.github.someone.single
+name: Single-file example
+kind: module
+summary: An unchanged historical script
+license: BSD-3-Clause
+repository: {repository}
+capabilities: [processing]
+releases:
+  - version: "1.0"
+    filename: {filename}
+    sha256: {digest}
+""",
+    )
+    return entries, filename
+
+
+def test_single_file_release_is_mirrored_without_execution(
+    served: dict, tmp_path: Path
+) -> None:
+    """A public artifact is usable offline without building a wheel."""
+    marker = tmp_path / "must-not-run"
+    source = f"open({str(marker)!r}, 'w').write('executed')\n".encode()
+    entries, filename = module_entry(served, tmp_path, source)
+    site = tmp_path / "site"
+    result = catalog.build_catalog(entries, HOST, site)
+    (plugin,) = result["plugins"]
+    assert plugin["kind"] == "module"
+    assert plugin["module"] == filename[:-3]
+    assert "distribution" not in plugin
+    (release,) = plugin["releases"]
+    assert release["targets"] == ["desktop"]
+    assert (site / release["url"]).read_bytes() == source
+    assert not marker.exists()
+    page = (site / "index.html").read_text("utf-8")
+    assert "Python file" in page
+    assert 'data-targets="desktop"' in page
+
+
+def test_single_file_published_mirror_installs_with_the_desktop_client(
+    served: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip(
+        "datalab.plugins.modules", reason="Requires the updated Desktop client"
+    )
+    marker = tmp_path / "must-not-run"
+    source = f"open({str(marker)!r}, 'w').write('executed')\n".encode()
+    entries, _filename = module_entry(served, tmp_path, source)
+    site = tmp_path / "site"
+    catalog.build_catalog(entries, HOST, site)
+    # Exercise the actual Desktop client on the generated offline mirror.
+    from datalab.plugins.catalog import download_release, read_folder_catalog
+    from datalab.plugins.store import InstalledPluginStore
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: pytest.fail("Offline mirror used the network"),
+    )
+    (offline,), warnings = read_folder_catalog(str(site))
+    assert not warnings
+    candidate = offline.get_installable_release()
+    assert candidate is not None
+    download = tmp_path / "download"
+    download.mkdir()
+    artifact = download_release(candidate, str(download))
+    store = InstalledPluginStore(str(tmp_path / "installed"))
+    installed = store.install_module(
+        artifact,
+        expected_sha256=candidate.sha256,
+        catalog_id=offline.id,
+        catalog_name=offline.name,
+        catalog_version=candidate.version,
+    ).plugin
+    assert installed.version == "1.0"
+    assert Path(store.get_path(installed)).read_bytes() == source
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    ("source", "detail"),
+    [
+        (b"", "empty"),
+        (b"class Broken(", "Invalid Python"),
+        (
+            b"from datalab.plugins import PluginInfo\n"
+            b"class Example:\n"
+            b'    PLUGIN_INFO = PluginInfo(id="org.example.other", version="1.0")',
+            "plugin_id",
+        ),
+        (
+            b"from datalab.plugins import PluginInfo\n"
+            b"class Example:\n"
+            b'    PLUGIN_INFO = PluginInfo(id="io.github.someone.single", '
+            b'version="2.0")',
+            "version",
+        ),
+    ],
+)
+def test_single_file_invalid_source_or_conflicting_metadata(
+    served: dict, tmp_path: Path, source: bytes, detail: str
+) -> None:
+    entries, _filename = module_entry(served, tmp_path, source)
+    with pytest.raises(catalog.CatalogError, match=detail):
+        catalog.build_catalog(entries, HOST)
+
+
+def test_single_file_requires_exact_asset_and_has_no_dependency_installation(
+    served: dict, tmp_path: Path
+) -> None:
+    entries, filename = module_entry(served, tmp_path, b"VALUE = 1\n")
+    path = entries / "io.github.someone.single.yaml"
+    original = path.read_text("utf-8")
+    path.write_text(original.replace(filename, "datalab_missing.py"), encoding="utf-8")
+    with pytest.raises(catalog.CatalogError, match="expected the module asset"):
+        catalog.build_catalog(entries, HOST)
+    path.write_text(
+        original.replace(
+            f"    filename: {filename}",
+            f"    filename: {filename}\n    source: pypi\n    distribution: anything",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(catalog.CatalogError, match="github"):
+        catalog.build_catalog(entries, HOST)
+
+
+def test_module_inspector_copy_matches_desktop() -> None:
+    """The shared module contract must remain byte-for-byte identical."""
+    desktop = (
+        Path(__file__).resolve().parents[2]
+        / "DataLab"
+        / "datalab"
+        / "plugins"
+        / "modules.py"
+    )
+    if desktop.is_file():
+        assert (
+            catalog.ROOT / "tools" / "modules.py"
+        ).read_bytes() == desktop.read_bytes()
+
+
 def test_additional_desktop_dependencies_are_verified_and_mirrored(
     served: dict, tmp_path: Path
 ) -> None:

@@ -18,6 +18,12 @@
       "minLength": 1,
       "maxLength": 80
     },
+    "kind": {
+      "description": "Distribution format, not a functional plugin category. Defaults to wheel.",
+      "enum": ["wheel", "module"]
+    },
+    "summary": {"type": "string", "minLength": 1},
+    "license": {"type": "string", "minLength": 1},
     "repository": {
       "description": "Public source repository, also used to find GitHub releases.",
       "type": "string",
@@ -57,6 +63,23 @@
   },
   "allOf": [
     {
+      "if": {"properties": {"kind": {"const": "module"}}, "required": ["kind"]},
+      "then": {
+        "required": ["summary", "license"],
+        "properties": {
+          "releases": {
+            "items": {
+              "required": ["filename"],
+              "properties": {
+                "source": {"const": "github"},
+                "dependency_wheels": {"maxItems": 0}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "if": {
         "properties": {"status": {"enum": ["deprecated", "revoked"]}},
         "required": ["status"]
@@ -71,6 +94,15 @@
       "required": ["version"],
       "properties": {
         "version": {"type": "string", "minLength": 1},
+        "filename": {
+          "description": "Exact GitHub release asset for a single-file module.",
+          "type": "string",
+          "pattern": "^datalab_[A-Za-z0-9_]+\\.py$"
+        },
+        "requires_python": {
+          "description": "Optional Python compatibility constraint for a module release.",
+          "type": "string"
+        },
         "sha256": {
           "description": "SHA-256 digest of the wheel. The catalog check prints it when missing.",
           "type": "string",

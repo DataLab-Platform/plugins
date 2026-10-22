@@ -37,10 +37,12 @@ from typing import Any
 
 import jsonschema
 import yaml
+from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import modules  # noqa: E402  (verbatim copy of datalab/plugins/modules.py)
 import wheels  # noqa: E402  (verbatim copy of datalab/plugins/wheels.py)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -176,6 +178,13 @@ def resolve_wheel(entry: dict, release: dict) -> tuple[str, str]:
             (asset["name"], asset["browser_download_url"]) for asset in info["assets"]
         ]
         where = f"GitHub release {tag} of {entry['repository']}"
+    if entry.get("kind") == "module":
+        selected = [item for item in files if item[0] == release["filename"]]
+        if len(selected) != 1:
+            raise CatalogError(
+                f"{where}: expected the module asset {release['filename']}"
+            )
+        return selected[0]
     pure_wheels = [item for item in files if item[0].endswith("-py3-none-any.whl")]
     if len(pure_wheels) != 1:
         raise CatalogError(
@@ -328,6 +337,53 @@ def check_release(
             f"{label}: the wheel digest must be declared, add to this release: "
             f"sha256: {digest}"
         )
+    if entry.get("kind") == "module":
+        try:
+            manifest = modules.inspect_module(data, filename=filename)
+            manifest = modules.apply_catalog_metadata(
+                manifest,
+                plugin_id=entry["id"],
+                name=entry["name"],
+                version=release["version"],
+                summary=entry["summary"],
+            )
+            if release.get("requires_python"):
+                supported = SpecifierSet(release["requires_python"])
+                if not any(
+                    Version(version) in supported
+                    for version in TARGET_PYTHONS["desktop"]
+                ):
+                    raise ValueError("Module has no supported Python version")
+        except ValueError as exc:
+            raise CatalogError(f"{label}: {exc}") from exc
+        if entry["license"] not in ALLOWED_LICENSES:
+            raise CatalogError(
+                f"{label}: license is not an accepted OSI-approved license"
+            )
+        if release.get("dependency_wheels"):
+            raise CatalogError(
+                f"{label}: module dependencies must be provided by the host"
+            )
+        if release.get("source", "github") != "github":
+            raise CatalogError(f"{label}: modules must use GitHub release assets")
+        record = {
+            "version": manifest["version"],
+            "filename": filename,
+            "url": f"modules/{digest}/{filename}",
+            "sha256": digest,
+            "size": len(data),
+            "requires_python": release.get("requires_python"),
+            "targets": ["desktop"],
+            "source_url": url,
+        }
+        if "yanked" in release:
+            record["yanked"] = release["yanked"]
+        package = {
+            "module": manifest["name"],
+            "summary": entry["summary"],
+            "license": entry["license"],
+        }
+        return record, package, data, {}
     groups, metadata = _read_wheel_metadata(data)
     dependency_records, dependency_files, dependency_versions = check_dependency_wheels(
         release
@@ -406,6 +462,14 @@ def check_entry(
         "capabilities": entry.get("capabilities", []),
         "keywords": entry.get("keywords", []),
     }
+    if entry.get("kind") == "module":
+        plugin["kind"] = "module"
+        names = {
+            modules.module_name(release["filename"]) for release in entry["releases"]
+        }
+        if len(names) != 1:
+            raise CatalogError(f"{path.name}: module file names must remain stable")
+        plugin["module"] = next(iter(names))
     if "icon" in entry:
         plugin["icon"] = entry["icon"]
     if "status_reason" in entry:
@@ -429,9 +493,11 @@ def check_entry(
         files.update(dependency_files)
     records.sort(key=lambda item: item[0], reverse=True)
     distributions = {
-        canonicalize_name(package["distribution"]) for _v, _r, package in records
+        canonicalize_name(package["distribution"])
+        for _v, _r, package in records
+        if "distribution" in package
     }
-    if len(distributions) != 1:
+    if entry.get("kind", "wheel") == "wheel" and len(distributions) != 1:
         raise CatalogError(f"{path.name}: releases come from different distributions")
     plugin.update(records[0][2])
     plugin["releases"] = [record for _version, record, _package in records]
@@ -463,7 +529,16 @@ def build_catalog(
         plugins.append(plugin)
         files.update(plugin_files)
     owners: dict[str, str] = {}
+    module_owners: dict[str, str] = {}
     for plugin in plugins:
+        if plugin.get("module"):
+            name = plugin["module"].casefold()
+            if name in module_owners:
+                errors.append(
+                    f"{plugin['id']}: module {name} is already listed by "
+                    f"{module_owners[name]}"
+                )
+            module_owners[name] = plugin["id"]
         if "distribution" not in plugin:
             continue
         key = canonicalize_name(plugin["distribution"])
@@ -556,6 +631,8 @@ def _render_card(plugin: dict) -> str:
             f'<span class="badge status-{esc(status)}">{esc(status.title())}</span>'
         )
     badges += [f'<span class="chip">{esc(label)}</span>' for label in capabilities]
+    if plugin.get("kind") == "module":
+        badges.append('<span class="chip">Python file</span>')
     badges += [
         f'<span class="chip target">{esc(target.title())}</span>' for target in targets
     ]
