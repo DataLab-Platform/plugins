@@ -7,10 +7,28 @@ Listing a plugin takes a public GitHub repository, a GitHub release holding the 
 - The source code is public on GitHub and licensed under an OSI-approved license, declared in the wheel metadata (`license = "..."` in `pyproject.toml` with setuptools 77 or later). Accepted licenses: 0BSD, AFL-3.0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CECILL-2.1, EPL-2.0, EUPL-1.2, GPL-2.0 and 3.0, ISC, LGPL-2.1 and 3.0, MIT, MPL-2.0, PSF-2.0, Unlicense, Zlib.
 - The plugin is distributed as a single pure-Python wheel (`*-py3-none-any.whl`), without compiled code.
 - The wheel declares its plugin class in the `datalab.plugins` entry-point group (DataLab desktop) and/or `datalab.web_plugins` (DataLab-Web).
-- Its dependencies are all provided by DataLab (for example `datalab-platform`, `sigima`, `numpy`, `scipy`). Other packages cannot be installed together with a plugin.
+- Its requirements must be satisfied by DataLab (for example `datalab-platform`, `sigima`, `numpy`, `scipy`) or, for Desktop, by explicitly listed dependency wheels. Existing host package versions cannot be replaced. Additional wheels may contain native libraries but must cover the intended Python/ABI/platform; no compilation or system installation is performed. Web requirements remain restricted to packages supplied by the Web host.
 - The plugin ID is the `id` of the plugin's `PluginInfo`. Prefer a reverse-domain name that you control, such as `io.github.<your-account>.<plugin>`. The `org.datalab.` prefix is reserved for DataLab-Platform plugins.
 
 Projects created with `datalab-plugin create` already follow these rules.
+
+## Additional Desktop dependencies
+
+Put the plugin wheel in a local catalog folder and run `datalab-plugin catalog prepare <folder>` from the target reference environment. This authoring command uses pip to resolve and download missing dependencies, including transitive dependencies, into the folder's `dependencies` subdirectory without installing them. It prints the `dependency_wheels` YAML entries to add to the plugin release. Preparing the wheelhouse needs network access; installing the complete local catalog does not.
+
+Each dependency entry names its wheel, upstream HTTPS URL and reviewed SHA-256:
+
+```yaml
+releases:
+  - version: 1.0.0
+    sha256: <plugin digest>
+    dependency_wheels:
+      - filename: example_dependency-1.0.0-py3-none-any.whl
+        url: https://files.example.org/example_dependency-1.0.0-py3-none-any.whl
+        sha256: <dependency digest>
+```
+
+The CI checks and mirrors these artifacts without executing them. The Desktop client downloads only compatible wheel tags, verifies the files, and resolves against its actual host using the local wheelhouse only. A missing transitive artifact or version conflict causes a refusal, not an implicit download from PyPI. Prepare and include wheels for each intended environment; do not assume that one native wheel supports all desktop installations. Respect the redistribution, license-notice and corresponding-source obligations of every dependency.
 
 ## Submitting a plugin
 

@@ -31,6 +31,8 @@ def make_wheel(
     license_expression: str = "BSD-3-Clause",
     requires: tuple[str, ...] = ("datalab-platform>=1.4", "numpy>=1.22"),
     requires_python: str = ">=3.9",
+    package: str = "example_plugin",
+    tag: str = "py3-none-any",
 ) -> tuple[str, bytes]:
     """Return the file name and content of a plugin wheel."""
     stem = f"{distribution.replace('-', '_')}-{version}"
@@ -45,15 +47,16 @@ def make_wheel(
     ]
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("example_plugin/__init__.py", "")
+        archive.writestr(f"{package}/__init__.py", "")
         archive.writestr(f"{stem}.dist-info/METADATA", "\n".join(metadata) + "\n")
         archive.writestr(
             f"{stem}.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            f"Wheel-Version: 1.0\nRoot-Is-Purelib: "
+            f"{'true' if tag.endswith('none-any') else 'false'}\nTag: {tag}\n",
         )
         archive.writestr(f"{stem}.dist-info/entry_points.txt", entry_points)
-        archive.writestr(f"{stem}.dist-info/top_level.txt", "example_plugin\n")
-    return f"{stem}-py3-none-any.whl", buffer.getvalue()
+        archive.writestr(f"{stem}.dist-info/top_level.txt", f"{package}\n")
+    return f"{stem}-{tag}.whl", buffer.getvalue()
 
 
 @pytest.fixture(name="served")
@@ -162,6 +165,60 @@ def test_missing_digest_reports_the_value_to_declare(
     )
 
     with pytest.raises(catalog.CatalogError, match=f"sha256: {digest}"):
+        catalog.build_catalog(entries, HOST)
+
+
+def test_additional_desktop_dependencies_are_verified_and_mirrored(
+    served: dict, tmp_path: Path
+) -> None:
+    """Ordinary native wheels are mirrored, without enabling Web dependencies."""
+    repository = "https://github.com/someone/example-plugin"
+    dependency_name, dependency_bytes = make_wheel(
+        "additional-helper",
+        package="additional_helper",
+        tag="cp311-cp311-win_amd64",
+        entry_points="",
+        requires=(),
+    )
+    dependency_url = f"https://files.example.test/{dependency_name}"
+    served[dependency_url] = dependency_bytes
+    digest = publish_on_github(
+        served,
+        repository,
+        "v1.0.0",
+        make_wheel(
+            entry_points=(
+                "[datalab.plugins]\nexample = example_plugin.desktop:ExamplePlugin\n"
+            ),
+            requires=("datalab-platform>=1.4", "additional-helper>=1"),
+        ),
+    )
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        "io.github.someone.example",
+        f"""id: io.github.someone.example
+name: Example
+repository: {repository}
+releases:
+  - version: 1.0.0
+    sha256: {digest}
+    dependency_wheels:
+      - filename: {dependency_name}
+        url: {dependency_url}
+        sha256: {hashlib.sha256(dependency_bytes).hexdigest()}
+""",
+    )
+    result = catalog.build_catalog(entries, HOST, tmp_path / "site")
+    (release,) = result["plugins"][0]["releases"]
+    assert release["targets"] == ["desktop"]
+    (artifact,) = release["dependency_wheels"]
+    assert (tmp_path / "site" / artifact["url"]).read_bytes() == dependency_bytes
+    page = (tmp_path / "site" / "index.html").read_text("utf-8")
+    assert "Additional Desktop packages" in page
+    assert f'href="{artifact["url"]}" download>{dependency_name}</a>' in page
+    served[dependency_url] = b"changed"
+    with pytest.raises(catalog.CatalogError, match="dependency digest"):
         catalog.build_catalog(entries, HOST)
 
 

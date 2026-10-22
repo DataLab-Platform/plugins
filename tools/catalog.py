@@ -28,11 +28,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from email.message import Message
 from email.parser import BytesParser
 from email.policy import default as email_policy
-from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
 
@@ -130,12 +129,10 @@ def fetch(url: str) -> bytes:
 
 def get_host_distributions() -> dict[str, str]:
     """Return the distributions installed in the running environment."""
-    distributions: dict[str, str] = {}
-    for distribution in importlib_metadata.distributions():
-        name = distribution.metadata["Name"]
-        if name:
-            distributions.setdefault(name, distribution.version)
-    return distributions
+    try:
+        return wheels.get_reference_distributions()
+    except ValueError as exc:
+        raise CatalogError(f"Invalid DataLab reference environment: {exc}") from exc
 
 
 def load_entry(path: Path, validator: jsonschema.Draft202012Validator) -> dict:
@@ -242,7 +239,12 @@ def _check_license(metadata: Message, label: str) -> str:
 
 
 def _inspect_for_target(
-    data: bytes, filename: str, target: str, group: str, available: Mapping[str, str]
+    data: bytes,
+    filename: str,
+    target: str,
+    group: str,
+    available: Mapping[str, str],
+    additional_distributions: Mapping[str, Sequence[str]] | None = None,
 ) -> dict:
     """Inspect a wheel with the first Python version of a target that accepts it."""
     pythons = TARGET_PYTHONS[target]
@@ -253,6 +255,7 @@ def _inspect_for_target(
                 filename=filename,
                 entry_point_group=group,
                 available_distributions=available,
+                additional_distributions=additional_distributions,
                 python_version=python_version,
                 marker_environment={
                     "python_version": python_version,
@@ -264,13 +267,57 @@ def _inspect_for_target(
     raise CatalogError(f"{error} ({target}, Python {', '.join(pythons)})")
 
 
+def check_dependency_wheels(
+    release: dict,
+) -> tuple[list[dict], dict[str, bytes], dict[str, list[str]]]:
+    """Check and mirror explicitly reviewed Desktop dependency artifacts."""
+    records: list[dict] = []
+    files: dict[str, bytes] = {}
+    versions: dict[str, list[str]] = {}
+    filenames: set[str] = set()
+    for artifact in release.get("dependency_wheels", []):
+        filename = artifact["filename"]
+        if filename in filenames:
+            raise CatalogError(f"Duplicate dependency wheel filename: {filename}")
+        filenames.add(filename)
+        data = fetch(artifact["url"])
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != artifact["sha256"]:
+            raise CatalogError(f"{filename}: dependency digest does not match")
+        try:
+            manifest = wheels.inspect_dependency_wheel(data, filename=filename)
+        except wheels.WheelInspectionError as exc:
+            raise CatalogError(f"{filename}: {exc}") from exc
+        _groups, metadata = _read_wheel_metadata(data)
+        license_id = _check_license(metadata, filename)
+        path = f"wheels/{digest}/{filename}"
+        records.append(
+            {
+                "filename": filename,
+                "url": path,
+                "sha256": digest,
+                "size": len(data),
+                "source_url": artifact["url"],
+                "distribution": manifest["distribution"],
+                "version": manifest["version"],
+                "license": license_id,
+                "requires_python": manifest["requires_python"],
+                "requires_dist": manifest["requires_dist"],
+            }
+        )
+        files[path] = data
+        name = canonicalize_name(manifest["distribution"])
+        versions.setdefault(name, []).append(manifest["version"])
+    return records, files, versions
+
+
 def check_release(
     entry: dict, release: dict, available: Mapping[str, str]
-) -> tuple[dict, dict, bytes]:
+) -> tuple[dict, dict, bytes, dict[str, bytes]]:
     """Download, verify and inspect one release.
 
     Returns:
-        Catalog release record, package information and wheel content
+        Release record, package information, plugin bytes and dependency files
     """
     label = f"{entry['id']} {release['version']}"
     filename, url = resolve_wheel(entry, release)
@@ -282,12 +329,20 @@ def check_release(
             f"sha256: {digest}"
         )
     groups, metadata = _read_wheel_metadata(data)
+    dependency_records, dependency_files, dependency_versions = check_dependency_wheels(
+        release
+    )
     manifests: dict[str, dict] = {}
     try:
         for target, group in TARGET_GROUPS:
             if group in groups:
                 manifests[target] = _inspect_for_target(
-                    data, filename, target, group, available
+                    data,
+                    filename,
+                    target,
+                    group,
+                    available,
+                    dependency_versions if target == "desktop" else None,
                 )
     except CatalogError as exc:
         raise CatalogError(f"{label}: {exc}") from exc
@@ -296,6 +351,8 @@ def check_release(
             f"{label}: the wheel declares neither a {wheels.DESKTOP_ENTRY_POINT_GROUP} "
             f"nor a {wheels.WEB_ENTRY_POINT_GROUP} entry point"
         )
+    if dependency_records and "desktop" not in manifests:
+        raise CatalogError(f"{label}: dependency artifacts are Desktop-only")
     manifest = next(iter(manifests.values()))
     try:
         same_version = Version(manifest["version"]) == Version(release["version"])
@@ -316,12 +373,14 @@ def check_release(
     }
     if "yanked" in release:
         record["yanked"] = release["yanked"]
+    if dependency_records:
+        record["dependency_wheels"] = dependency_records
     package = {
         "distribution": manifest["distribution"],
         "summary": manifest["summary"],
         "license": _check_license(metadata, label),
     }
-    return record, package, data
+    return record, package, data, dependency_files
 
 
 def check_entry(
@@ -362,9 +421,12 @@ def check_entry(
     records: list[tuple[Version, dict, dict]] = []
     files: dict[str, bytes] = {}
     for release in entry["releases"]:
-        record, package, data = check_release(entry, release, available)
+        record, package, data, dependency_files = check_release(
+            entry, release, available
+        )
         records.append((Version(record["version"]), record, package))
         files[record["url"]] = data
+        files.update(dependency_files)
     records.sort(key=lambda item: item[0], reverse=True)
     distributions = {
         canonicalize_name(package["distribution"]) for _v, _r, package in records
@@ -540,6 +602,18 @@ def _render_card(plugin: dict) -> str:
             '<details class="digest"><summary>SHA-256</summary>'
             f"<code>{esc(latest['sha256'])}</code></details>"
         )
+        if latest.get("dependency_wheels"):
+            links = "".join(
+                f'<li><a href="{esc(artifact["url"])}" download>'
+                f"{esc(artifact['filename'])}</a></li>"
+                for artifact in latest["dependency_wheels"]
+            )
+            foot.append(
+                '<details class="digest"><summary>Additional Desktop packages</summary>'
+                "<p>For offline installation, download the wheels for your Python "
+                "version and platform into a <code>dependencies</code> folder next "
+                f"to the plugin wheel.</p><ul>{links}</ul></details>"
+            )
 
     return (
         f'<article class="card" data-tier="{esc(tier)}" '

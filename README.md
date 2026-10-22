@@ -11,6 +11,8 @@ To install a downloaded file instead (also with the standalone version of DataLa
 1. Open <https://datalab-platform.com/plugins/> and download the wheel (`.whl`) of the plugin.
 2. In DataLab, open **Plugins > Configure plugins...**, go to the **Install plugins** tab and click **Install from file...**.
 
+If the plugin lists **Additional Desktop packages**, download the wheels for your Python version and platform into a `dependencies` folder next to the plugin wheel. A complete local catalog with these files can be installed without Internet access, including with the standalone application. DataLab shows the additional packages before confirmation, never replaces existing package versions, and activates the added dependencies after a restart. Uninstalling a plugin keeps its shared dependencies.
+
 A plugin runs with the same rights as DataLab: it may read and modify your files. Install only plugins from authors you trust. Being listed here does not mean that a plugin was audited.
 
 ## Publishing a plugin
@@ -20,7 +22,7 @@ Any author may list a plugin by opening a pull request that adds one small YAML 
 ## How the catalog works
 
 - Each plugin is described by `plugins/<id>.yaml`, validated against [schema/plugin-entry.schema.json](schema/plugin-entry.schema.json).
-- For each release, the CI downloads the wheel from the GitHub release (or from PyPI), checks its SHA-256 digest against the entry, and inspects it without running its code, with the same rules as DataLab: pure-Python wheel, `datalab.plugins` (desktop) and/or `datalab.web_plugins` (web) entry points, dependencies provided by the latest DataLab release, OSI-approved license. Python compatibility is checked per target: a desktop wheel must install on at least one Python version supported by DataLab (3.9 to 3.14), a web wheel on the Python of the Pyodide release used by DataLab-Web (3.12).
+- For each release, the CI downloads the wheel from the GitHub release (or from PyPI), checks its SHA-256 digest against the entry, and inspects it without running its code: pure-Python plugin, `datalab.plugins` (desktop) and/or `datalab.web_plugins` (web) entry points, declared requirements and OSI-approved license. Desktop releases may also list reviewed dependency wheels, including native wheels, which are verified and mirrored with the plugin. Web requirements must still be provided by its host. Python compatibility is checked per target: a desktop plugin must install on at least one Python version supported by DataLab (3.9 to 3.14), a web plugin on the Python of the Pyodide release used by DataLab-Web (3.12). DataLab resolves the complete dependency graph against the actual installation; publication metadata checks are not a functional certification of every platform.
 - When a pull request is merged, the catalog is rebuilt and published: `catalog.json`, a copy of every wheel in `wheels/<sha256>/`, and a human-readable `index.html`. Wheels are downloaded again at each build and must still match the reviewed digests.
 - The page uses content-versioned URLs for its stylesheet and script, so browsers fetch updated assets instead of reusing an older cached version.
 - Plugins from DataLab-Platform repositories are marked **official**, others **community**. IDs starting with `org.datalab.` are reserved for official plugins.
@@ -28,6 +30,8 @@ Any author may list a plugin by opening a pull request that adds one small YAML 
 ## Catalog format
 
 `catalog.json` (`schema_version` 1) lists `plugins`, each with `id`, `name`, `tier` (`official` or `community`), `status` (`active`, `deprecated` or `revoked`, with `status_reason`), `repository`, `documentation`, `capabilities`, `keywords`, `distribution`, `summary`, `license` and `releases`. Releases are sorted from the newest and give `version`, `filename`, `url`, `sha256`, `size`, `requires_python`, `requires_dist`, `targets` (`desktop`, `web`), `source_url` and, when withdrawn, `yanked` (reason). Release URLs are relative to `catalog.json`, so that the catalog can be mirrored on a private server. Revoked plugins keep only the version and digest of their releases.
+
+A release may additionally list `dependency_wheels`, each with `filename`, mirrored `url`, `sha256` and `size`, plus upstream and metadata information. The field is optional: existing catalogs and self-contained plugins keep their format and behavior. Dependency artifacts belong to Desktop only; this does not add a package-index installer to DataLab-Web.
 
 Plugins may also declare an optional `icon` HTTPS URL, used only by the web page. The image is loaded directly by the browser, not downloaded or mirrored by the catalog build. Initials remain the fallback if the image is absent or unavailable, including on a private mirror without access to the image host. See [CONTRIBUTING.md](CONTRIBUTING.md#optional-icon).
 

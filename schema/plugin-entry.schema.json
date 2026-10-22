@@ -94,6 +94,11 @@
           "description": "Reason why this release should no longer be installed.",
           "type": "string",
           "minLength": 1
+        },
+        "dependency_wheels": {
+          "description": "Reviewed additional Desktop dependency wheels, including transitive dependencies.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/dependency-wheel"}
         }
       },
       "allOf": [
@@ -102,6 +107,19 @@
           "then": {"required": ["distribution"]}
         }
       ]
+    },
+    "dependency-wheel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "url", "sha256"],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*\\.whl$"
+        },
+        "url": {"type": "string", "pattern": "^https://"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
     }
   }
 }
