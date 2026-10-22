@@ -296,6 +296,35 @@ def test_empty_catalog_page_invites_submissions() -> None:
     assert 'class="card"' not in page
 
 
+@pytest.mark.parametrize("asset", ["style.css", "catalog.js"])
+def test_page_versions_assets_by_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, asset: str
+) -> None:
+    """A changed asset gets a new URL instead of reusing a cached old file."""
+    page_dir = tmp_path / "page"
+    page_dir.mkdir()
+    for name in ("index.html", "style.css", "catalog.js"):
+        (page_dir / name).write_bytes((catalog.PAGE_DIR / name).read_bytes())
+    monkeypatch.setattr(catalog, "PAGE_DIR", page_dir)
+    payload = {"generated_at": "2026-10-08T13:29:23+00:00", "plugins": []}
+    urls = {}
+    for name in ("style.css", "catalog.js"):
+        version = hashlib.sha256((page_dir / name).read_bytes()).hexdigest()[:12]
+        urls[name] = f"{name}?v={version}"
+    page = catalog.render_index(payload)
+    assert all(url in page for url in urls.values())
+    assert catalog.render_index(payload) == page
+
+    path = page_dir / asset
+    path.write_bytes(path.read_bytes() + b"\n/* Updated */\n")
+    updated = catalog.render_index(payload)
+    version = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    assert f"{asset}?v={version}" in updated
+    assert urls[asset] not in updated
+    other = "catalog.js" if asset == "style.css" else "style.css"
+    assert urls[other] in updated
+
+
 @pytest.mark.parametrize(
     ("text", "message"),
     [

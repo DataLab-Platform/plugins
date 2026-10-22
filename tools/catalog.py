@@ -571,7 +571,13 @@ def render_index(catalog: dict) -> str:
     generated = datetime.datetime.fromisoformat(catalog["generated_at"])
     generated = generated.astimezone(datetime.timezone.utc)
     template = string.Template((PAGE_DIR / "index.html").read_text(encoding="utf-8"))
+    asset_versions = {
+        name: hashlib.sha256((PAGE_DIR / name).read_bytes()).hexdigest()[:12]
+        for name in ("style.css", "catalog.js")
+    }
     return template.substitute(
+        style_version=asset_versions["style.css"],
+        script_version=asset_versions["catalog.js"],
         cards=cards,
         count=_count_plugins(len(plugins)),
         updated=f"{generated:%Y-%m-%d %H:%M} UTC",

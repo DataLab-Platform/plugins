@@ -22,6 +22,7 @@ Any author may list a plugin by opening a pull request that adds one small YAML 
 - Each plugin is described by `plugins/<id>.yaml`, validated against [schema/plugin-entry.schema.json](schema/plugin-entry.schema.json).
 - For each release, the CI downloads the wheel from the GitHub release (or from PyPI), checks its SHA-256 digest against the entry, and inspects it without running its code, with the same rules as DataLab: pure-Python wheel, `datalab.plugins` (desktop) and/or `datalab.web_plugins` (web) entry points, dependencies provided by the latest DataLab release, OSI-approved license. Python compatibility is checked per target: a desktop wheel must install on at least one Python version supported by DataLab (3.9 to 3.14), a web wheel on the Python of the Pyodide release used by DataLab-Web (3.12).
 - When a pull request is merged, the catalog is rebuilt and published: `catalog.json`, a copy of every wheel in `wheels/<sha256>/`, and a human-readable `index.html`. Wheels are downloaded again at each build and must still match the reviewed digests.
+- The page uses content-versioned URLs for its stylesheet and script, so browsers fetch updated assets instead of reusing an older cached version.
 - Plugins from DataLab-Platform repositories are marked **official**, others **community**. IDs starting with `org.datalab.` are reserved for official plugins.
 
 ## Catalog format
