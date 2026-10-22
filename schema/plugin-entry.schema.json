@@ -28,6 +28,11 @@
       "type": "string",
       "pattern": "^https://"
     },
+    "icon": {
+      "description": "Optional HTTPS URL of an existing image, displayed in the web catalog. Initials are used if the image cannot be loaded.",
+      "type": "string",
+      "pattern": "^https://[^/?#\\s]+(?:[/?#][^\\s]*)?$"
+    },
     "capabilities": {
       "type": "array",
       "uniqueItems": true,

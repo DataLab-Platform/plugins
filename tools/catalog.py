@@ -347,6 +347,8 @@ def check_entry(
         "capabilities": entry.get("capabilities", []),
         "keywords": entry.get("keywords", []),
     }
+    if "icon" in entry:
+        plugin["icon"] = entry["icon"]
     if "status_reason" in entry:
         plugin["status_reason"] = entry["status_reason"]
     if plugin["status"] == "revoked":
@@ -476,6 +478,12 @@ def _render_card(plugin: dict) -> str:
     words = [word for word in plugin["name"].split() if word[:1].isalnum()]
     initials = "".join(word[0] for word in words[:2]).upper() or "?"
     hue = int(hashlib.sha256(plugin["id"].encode()).hexdigest()[:4], 16) % 360
+    icon = ""
+    if "icon" in plugin:
+        icon = (
+            f'<img class="plugin-icon" src="{esc(plugin["icon"])}" alt="" '
+            'width="48" height="48" referrerpolicy="no-referrer" hidden>'
+        )
 
     badges = [
         f'<span class="badge tier-{esc(tier)}" '
@@ -538,7 +546,7 @@ def _render_card(plugin: dict) -> str:
         f'data-targets="{esc(" ".join(targets))}" data-search="{esc(searchable)}">'
         '<header class="card-head">'
         f'<span class="monogram" style="--hue: {hue}" aria-hidden="true">'
-        f"{esc(initials)}</span>"
+        f"{esc(initials)}{icon}</span>"
         f'<div><h2><a href="{esc(repository)}">{esc(plugin["name"])}</a></h2>'
         f'<code class="plugin-id">{esc(plugin["id"])}</code></div>'
         "</header>" + "".join(body) + f'<div class="card-foot">{"".join(foot)}</div>'

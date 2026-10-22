@@ -92,21 +92,23 @@ def write_entry(directory: Path, plugin_id: str, text: str) -> Path:
     return path
 
 
+@pytest.mark.parametrize("icon", [None, "https://images.example.test/icon"])
 def test_github_release_is_mirrored_in_the_published_catalog(
-    served: dict, tmp_path: Path
+    served: dict, tmp_path: Path, icon: str | None
 ) -> None:
-    """A community release is verified, inspected and mirrored."""
+    """A release is mirrored without downloading its optional icon."""
     repository = "https://github.com/someone/example-plugin"
     wheel = make_wheel()
     digest = publish_on_github(served, repository, "v1.0.0", wheel)
     entries = tmp_path / "plugins"
+    icon_field = f"icon: {icon}\n" if icon is not None else ""
     write_entry(
         entries,
         "io.github.someone.example",
         f"""id: io.github.someone.example
 name: Example
 repository: {repository}
-capabilities: [processing]
+{icon_field}capabilities: [processing]
 releases:
   - version: 1.0.0
     sha256: {digest}
@@ -125,7 +127,19 @@ releases:
     assert (tmp_path / "site" / release["url"]).read_bytes() == wheel[1]
     published = json.loads((tmp_path / "site" / "catalog.json").read_text("utf-8"))
     assert published["schema_version"] == 1
+    if icon is None:
+        assert "icon" not in plugin
+        assert "icon" not in published["plugins"][0]
+    else:
+        assert plugin["icon"] == icon
+        assert published["plugins"][0]["icon"] == icon
     page = (tmp_path / "site" / "index.html").read_text("utf-8")
+    if icon is None:
+        assert 'class="plugin-icon"' not in page
+        assert ">E</span>" in page
+    else:
+        assert f'<img class="plugin-icon" src="{icon}" alt=""' in page
+        assert 'width="48" height="48" referrerpolicy="no-referrer" hidden>' in page
     assert 'data-tier="community" data-targets="desktop web"' in page
     assert f'href="{release["url"]}" download>Download 1.0.0</a>' in page
     assert ">Community</span>" in page
@@ -206,16 +220,19 @@ def test_pypi_release_and_license_policy(served: dict, tmp_path: Path) -> None:
                 catalog.build_catalog(entries, HOST)
 
 
+@pytest.mark.parametrize("icon", [None, "https://images.example.test/icon.svg"])
 def test_revoked_plugin_is_listed_without_downloading_its_wheels(
-    served: dict, tmp_path: Path
+    served: dict, tmp_path: Path, icon: str | None
 ) -> None:
     """Clients can warn about a revoked plugin that is never mirrored."""
     entries = tmp_path / "plugins"
+    icon_field = f"icon: {icon}\n" if icon is not None else ""
     write_entry(
         entries,
         "io.github.someone.example",
         "id: io.github.someone.example\nname: Example\n"
-        "repository: https://github.com/someone/example-plugin\nstatus: revoked\n"
+        "repository: https://github.com/someone/example-plugin\n"
+        f"{icon_field}status: revoked\n"
         f"status_reason: Malicious code\nreleases:\n  - version: 1.0.0\n"
         f"    sha256: {'a' * 64}\n",
     )
@@ -224,6 +241,7 @@ def test_revoked_plugin_is_listed_without_downloading_its_wheels(
 
     (plugin,) = result["plugins"]
     assert plugin["status"] == "revoked"
+    assert plugin.get("icon") == icon
     assert plugin["releases"] == [{"version": "1.0.0", "sha256": "a" * 64}]
     assert not (tmp_path / "site" / "wheels").exists()
     assert not served
@@ -245,6 +263,7 @@ def test_page_escapes_metadata_read_from_wheels() -> None:
                     "tier": "community",
                     "status": "active",
                     "repository": "https://github.com/someone/example",
+                    "icon": 'https://example.test/icon?x="><svg/onload=alert(1)>&v=1',
                     "summary": '<script>alert("x")</script>',
                     "keywords": ['"><img src=x>'],
                     "releases": [],
@@ -256,7 +275,12 @@ def test_page_escapes_metadata_read_from_wheels() -> None:
     assert "<script>alert" not in page
     assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;" in page
     assert "<img src=x>" not in page
-    assert ">CD</span>" in page
+    assert "<svg/onload" not in page
+    assert (
+        'src="https://example.test/icon?x=&quot;&gt;&lt;svg/onload=alert(1)&gt;&amp;v=1"'
+        in page
+    )
+    assert '>CD<img class="plugin-icon"' in page
     assert "Camera &amp; Detector</a>" in page
     assert "1 plugin<" in page
     assert '<time datetime="2026-10-08T13:29:23+00:00">2026-10-08 13:29 UTC' in page
@@ -301,6 +325,35 @@ def test_invalid_entries_are_rejected(tmp_path: Path, text: str, message: str) -
     write_entry(entries, "io.github.someone.example", text)
 
     with pytest.raises(catalog.CatalogError, match=message):
+        catalog.build_catalog(entries, HOST)
+
+
+@pytest.mark.parametrize(
+    "icon",
+    [
+        "",
+        "http://example.test/icon.svg",
+        "javascript:alert(1)",
+        "data:image/svg+xml,<svg/>",
+        "icons/plugin.svg",
+        "//example.test/icon.svg",
+        "https://",
+        "https:///icon.svg",
+        "https://example.test/icon with spaces.svg",
+    ],
+)
+def test_invalid_icon_urls_are_rejected(tmp_path: Path, icon: str) -> None:
+    """Only absolute HTTPS image URLs are accepted, before any download."""
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        "io.github.someone.example",
+        "id: io.github.someone.example\nname: Example\n"
+        "repository: https://github.com/someone/example\n"
+        f"icon: {json.dumps(icon)}\nreleases:\n  - version: 1.0.0\n",
+    )
+
+    with pytest.raises(catalog.CatalogError, match="icon"):
         catalog.build_catalog(entries, HOST)
 
 

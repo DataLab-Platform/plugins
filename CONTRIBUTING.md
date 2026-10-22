@@ -32,6 +32,18 @@ Projects created with `datalab-plugin create` already follow these rules.
 
 A wheel published on PyPI may be listed instead of a GitHub release asset, with `source: pypi` and `distribution: <name>` in the release.
 
+### Optional icon
+
+To display an existing plugin icon in the web catalog, add its HTTPS image URL once, at the plugin level:
+
+```yaml
+icon: https://raw.githubusercontent.com/alice/datalab-spectrum-tools/main/src/spectrum_tools/icons/plugin.svg
+```
+
+SVG and PNG are recommended; any image format supported by browsers may be used. On GitHub, use the raw file URL, not a `github.com/.../blob/...` page. No particular file name, location or hosting provider is required, and there is no need to copy the image here or publish a new plugin version.
+
+The browser loads the icon directly from its host, without sending a referrer. The catalog build does not download or check the image. Initials are displayed when no icon is declared, when it cannot be loaded, or when JavaScript is disabled. If the file moves, update its URL; a branch URL can update the icon independently of plugin releases, subject to browser caching.
+
 ## Publishing a new version
 
 Add the version, with its `sha256`, at the end of `releases` and open a pull request. Every new version is reviewed before it is published: keep the previous versions listed.

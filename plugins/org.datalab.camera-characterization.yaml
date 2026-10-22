@@ -1,6 +1,7 @@
 id: org.datalab.camera-characterization
 name: "Camera & Detector Characterization"
 repository: https://github.com/DataLab-Platform/datalab-camera-characterization
+icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-camera-characterization/develop/src/datalab_camera_characterization/icons/camera_characterization.svg
 capabilities: [application, processing]
 keywords: [camera, detector, characterization]
 releases:

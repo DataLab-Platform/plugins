@@ -1,6 +1,21 @@
 "use strict";
 
 (() => {
+  for (const image of document.querySelectorAll(".plugin-icon")) {
+    const updateIcon = () => {
+      image.hidden = image.naturalWidth === 0;
+      if (image.hidden) {
+        console.warn(`Cannot load plugin icon: ${image.src}`);
+      }
+    };
+    if (image.complete) {
+      updateIcon();
+    } else {
+      image.addEventListener("load", updateIcon, { once: true });
+      image.addEventListener("error", updateIcon, { once: true });
+    }
+  }
+
   const toolbar = document.querySelector(".toolbar");
   const cards = Array.from(document.querySelectorAll(".card"));
   if (!toolbar || cards.length === 0) {

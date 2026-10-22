@@ -1,6 +1,7 @@
 id: org.datalab.pulse-characterization
 name: "Pulse & Transient Characterization"
 repository: https://github.com/DataLab-Platform/datalab-pulse-characterization
+icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-pulse-characterization/develop/src/datalab_pulse_characterization/icons/pulse_characterization.svg
 capabilities: [application, processing]
 keywords: [pulse, transient, timing, stability]
 releases:

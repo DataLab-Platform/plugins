@@ -28,6 +28,8 @@ Any author may list a plugin by opening a pull request that adds one small YAML 
 
 `catalog.json` (`schema_version` 1) lists `plugins`, each with `id`, `name`, `tier` (`official` or `community`), `status` (`active`, `deprecated` or `revoked`, with `status_reason`), `repository`, `documentation`, `capabilities`, `keywords`, `distribution`, `summary`, `license` and `releases`. Releases are sorted from the newest and give `version`, `filename`, `url`, `sha256`, `size`, `requires_python`, `requires_dist`, `targets` (`desktop`, `web`), `source_url` and, when withdrawn, `yanked` (reason). Release URLs are relative to `catalog.json`, so that the catalog can be mirrored on a private server. Revoked plugins keep only the version and digest of their releases.
 
+Plugins may also declare an optional `icon` HTTPS URL, used only by the web page. The image is loaded directly by the browser, not downloaded or mirrored by the catalog build. Initials remain the fallback if the image is absent or unavailable, including on a private mirror without access to the image host. See [CONTRIBUTING.md](CONTRIBUTING.md#optional-icon).
+
 ## Development
 
 ```powershell
