@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import io
 import json
 import sys
 import zipfile
+from importlib.machinery import ModuleSpec, PathFinder
 from pathlib import Path
 
 import pytest
@@ -218,9 +220,21 @@ def test_single_file_release_is_mirrored_without_execution(
 def test_single_file_published_mirror_installs_with_the_desktop_client(
     served: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pytest.importorskip(
-        "datalab.plugins.modules", reason="Requires the updated Desktop client"
+    host = importlib.util.find_spec("datalab")
+    plugins = (
+        PathFinder.find_spec("datalab.plugins", host.submodule_search_locations)
+        if host is not None and host.submodule_search_locations is not None
+        else None
     )
+    if (
+        plugins is None
+        or plugins.submodule_search_locations is None
+        or PathFinder.find_spec(
+            "datalab.plugins.modules", plugins.submodule_search_locations
+        )
+        is None
+    ):
+        pytest.skip("Requires the updated Desktop client, not the legacy Qt host")
     marker = tmp_path / "must-not-run"
     source = f"open({str(marker)!r}, 'w').write('executed')\n".encode()
     entries, _filename = module_entry(served, tmp_path, source)
@@ -252,6 +266,25 @@ def test_single_file_published_mirror_installs_with_the_desktop_client(
     assert installed.version == "1.0"
     assert Path(store.get_path(installed)).read_bytes() == source
     assert not marker.exists()
+
+
+def test_optional_integration_does_not_import_the_legacy_qt_host(
+    served: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DataLab 1.3 has plugins.py, which imports Qt before a child lookup."""
+    original = PathFinder.find_spec
+    legacy = ModuleSpec("datalab.plugins", loader=None, is_package=False)
+
+    def find_spec(name, path=None, target=None):
+        if name == "datalab.plugins":
+            return legacy
+        return original(name, path, target)
+
+    monkeypatch.setattr(PathFinder, "find_spec", find_spec)
+    with pytest.raises(pytest.skip.Exception, match="updated Desktop client"):
+        test_single_file_published_mirror_installs_with_the_desktop_client(
+            served, tmp_path, monkeypatch
+        )
 
 
 @pytest.mark.parametrize(
