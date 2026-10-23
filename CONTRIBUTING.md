@@ -34,7 +34,7 @@ releases:
   - version: "1.0.0"
     filename: datalab_spectrum_tools.py
     sha256: <SHA-256 of the actual file>
-    requires_python: ">=3.9"
+    requires_python: ">=3.10"
 ```
 
 `filename` selects an exact release asset and stays stable between versions; do not add version numbers or hyphens that make the Python module name invalid. `summary`, `license` and a release version are required in the public entry. Literal source identities and versions, when readable, must agree with the entry. Unknown metadata is not evaluated: constructors, dynamic expressions and plugin code are never executed during inspection. A syntactically valid module is not thereby certified as a working or safe plugin.

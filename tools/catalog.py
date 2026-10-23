@@ -72,7 +72,7 @@ TARGET_GROUPS = (
 )
 #: Python versions of each target: a wheel must install on at least one of them
 TARGET_PYTHONS = {
-    "desktop": ("3.9", "3.10", "3.11", "3.12", "3.13", "3.14"),
+    "desktop": ("3.10", "3.11", "3.12", "3.13", "3.14"),
     # Python of the Pyodide release used by DataLab-Web (Pyodide 0.26)
     "web": ("3.12",),
 }
