@@ -658,9 +658,11 @@ def test_wheels_must_install_on_the_latest_datalab(
 @pytest.mark.parametrize(
     ("requires_python", "error"),
     [
+        (">=3.10", None),
         (">=3.12", None),
         (">=3.13", r"\(web, Python 3.12\)"),
-        ("<3.9", r"\(desktop, Python 3.9, 3.10, .*3.14\)"),
+        ("<3.10", r"\(desktop, Python 3.10, .*3.14\)"),
+        ("==3.9.*", r"\(desktop, Python 3.10, .*3.14\)"),
     ],
 )
 def test_targets_are_checked_with_their_python_versions(
