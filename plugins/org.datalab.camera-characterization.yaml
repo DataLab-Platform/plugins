@@ -5,5 +5,7 @@ icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-camera-characte
 capabilities: [application, processing]
 keywords: [camera, detector, characterization]
 releases:
+  - version: 0.2.1
+    sha256: b2942edccb890c4421b3a49ee31e70926254238bb774c07505dec431daeb6c0d
   - version: 0.2.0
     sha256: eadf9a309245e806bcea118996f3ed61886841891167ed70f529dcf945fb07d7
