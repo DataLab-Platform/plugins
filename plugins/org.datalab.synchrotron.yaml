@@ -1,0 +1,9 @@
+id: org.datalab.synchrotron
+name: "Synchrotron Beamline Data"
+repository: https://github.com/DataLab-Platform/datalab-synchrotron
+icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-synchrotron/develop/src/datalab_synchrotron/icons/synchrotron.svg
+capabilities: [application, io, processing]
+keywords: [synchrotron, beamline, SPEC, XAS, XDI]
+releases:
+  - version: 0.1.0
+    sha256: c6a17fa339920c53ead7ab1cc06ff82537acac88d7e9472bd316a7c931813b2c

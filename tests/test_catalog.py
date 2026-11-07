@@ -35,6 +35,7 @@ def make_wheel(
     requires_python: str = ">=3.9",
     package: str = "example_plugin",
     tag: str = "py3-none-any",
+    summary: str = "Example plugin",
 ) -> tuple[str, bytes]:
     """Return the file name and content of a plugin wheel."""
     stem = f"{distribution.replace('-', '_')}-{version}"
@@ -42,7 +43,7 @@ def make_wheel(
         "Metadata-Version: 2.4",
         f"Name: {distribution}",
         f"Version: {version}",
-        "Summary: Example plugin",
+        f"Summary: {summary}",
         f"License-Expression: {license_expression}",
         f"Requires-Python: {requires_python}",
         *(f"Requires-Dist: {requirement}" for requirement in requires),
@@ -150,6 +151,156 @@ releases:
     assert ">Community</span>" in page
     for name in catalog.PAGE_ASSETS:
         assert (tmp_path / "site" / name).is_file()
+
+
+@pytest.mark.parametrize("kind", ["camera", "pulse"])
+def test_candidate_catalog_keeps_older_releases_and_checks_host_requirements(
+    served: dict, tmp_path: Path, kind: str
+) -> None:
+    """Local fixtures model the release transition without claiming official hashes."""
+    distribution = f"datalab-{kind}-characterization"
+    repository = f"https://github.com/DataLab-Platform/{distribution}"
+    old = make_wheel(
+        distribution,
+        "0.2.0",
+        requires=("datalab-platform>=1.3",),
+        requires_python=">=3.9",
+    )
+    candidate = make_wheel(
+        distribution,
+        "0.2.1",
+        requires=("datalab-platform>=1.4,<2",),
+        requires_python=">=3.10",
+    )
+    old_digest = publish_on_github(served, repository, "v0.2.0", old)
+    candidate_digest = publish_on_github(served, repository, "v0.2.1", candidate)
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        f"org.datalab.{kind}-characterization",
+        f"""id: org.datalab.{kind}-characterization
+name: {kind.title()}
+repository: {repository}
+releases:
+  - version: 0.2.0
+    sha256: {old_digest}
+  - version: 0.2.1
+    sha256: {candidate_digest}
+""",
+    )
+
+    site = tmp_path / "site"
+    (plugin,) = catalog.build_catalog(entries, HOST, site)["plugins"]
+    assert [release["version"] for release in plugin["releases"]] == [
+        "0.2.1",
+        "0.2.0",
+    ]
+    assert [release["sha256"] for release in plugin["releases"]] == [
+        candidate_digest,
+        old_digest,
+    ]
+    assert all(
+        release["targets"] == ["desktop", "web"] for release in plugin["releases"]
+    )
+    assert (site / plugin["releases"][0]["url"]).read_bytes() == candidate[1]
+    for group in ("datalab.plugins", "datalab.web_plugins"):
+        catalog.wheels.inspect_wheel(
+            candidate[1],
+            filename=candidate[0],
+            entry_point_group=group,
+            available_distributions=HOST,
+            python_version="3.11",
+        )
+        with pytest.raises(catalog.wheels.WheelInspectionError, match="incompatible"):
+            catalog.wheels.inspect_wheel(
+                candidate[1],
+                filename=candidate[0],
+                entry_point_group=group,
+                available_distributions={"datalab-platform": "1.3.0"},
+                python_version="3.11",
+            )
+
+    from datalab.plugins.catalog import read_folder_catalog
+
+    (offline,), warnings = read_folder_catalog(str(site))
+    assert not warnings
+    assert offline.get_installable_release(python_version="3.11").version == "0.2.1"
+    assert offline.get_installable_release(python_version="3.9").version == "0.2.0"
+
+
+@pytest.mark.parametrize("kind", ["synchrotron", "tango"])
+def test_demo_catalog_summary_and_desktop_only_target(
+    served: dict, tmp_path: Path, kind: str
+) -> None:
+    """The metadata shown before installation describes demonstration limits."""
+    distribution = f"datalab-{kind}"
+    repository = f"https://github.com/DataLab-Platform/{distribution}"
+    summary = f"Demonstration DataLab plugin: {kind}"
+    if kind == "tango":
+        summary += "; Python only, MSI/standalone not qualified"
+    wheel = make_wheel(
+        distribution,
+        "0.1.0",
+        entry_points="[datalab.plugins]\nexample = example_plugin.desktop:Plugin\n",
+        requires=("datalab-platform>=1.4,<2",),
+        requires_python=">=3.10",
+        summary=summary,
+    )
+    digest = publish_on_github(served, repository, "v0.1.0", wheel)
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        f"org.datalab.{kind}",
+        f"id: org.datalab.{kind}\nname: {kind.title()}\n"
+        f"repository: {repository}\nreleases:\n"
+        f"  - version: 0.1.0\n    sha256: {digest}\n",
+    )
+    site = tmp_path / "site"
+    (plugin,) = catalog.build_catalog(entries, HOST, site)["plugins"]
+    assert plugin["summary"] == summary
+    assert plugin["releases"][0]["targets"] == ["desktop"]
+    assert summary in (site / "index.html").read_text("utf-8")
+
+
+@pytest.mark.parametrize(
+    "member", ["METADATA", "entry_points.txt", "WHEEL", "top_level.txt"]
+)
+@pytest.mark.parametrize("damage", ["local header", "compressed data"])
+def test_damaged_wheel_member_is_reported(
+    served: dict, tmp_path: Path, member: str, damage: str
+) -> None:
+    """Broken members are reported as catalog errors, including before inspection."""
+    filename, original = make_wheel()
+    buffer = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(original)) as source,
+        zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as compressed,
+    ):
+        for name in source.namelist():
+            compressed.writestr(name, source.read(name))
+    data = bytearray(buffer.getvalue())
+    name = f"example_plugin-1.0.0.dist-info/{member}".encode()
+    header = data.rfind(b"PK\x03\x04", 0, data.find(name))
+    assert header >= 0
+    if damage == "local header":
+        data[header + 3] = 0xFE
+    else:
+        name_length = int.from_bytes(data[header + 26 : header + 28], "little")
+        extra_length = int.from_bytes(data[header + 28 : header + 30], "little")
+        start = header + 30 + name_length + extra_length
+        data[start : start + 8] = b"\xff" * 8
+    repository = "https://github.com/someone/example-plugin"
+    digest = publish_on_github(served, repository, "v1.0.0", (filename, bytes(data)))
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        "io.github.someone.example",
+        f"id: io.github.someone.example\nname: Example\nrepository: {repository}\n"
+        f"releases:\n  - version: 1.0.0\n    sha256: {digest}\n",
+    )
+
+    with pytest.raises(catalog.CatalogError, match="Cannot read|cannot be read"):
+        catalog.build_catalog(entries, HOST)
 
 
 def test_missing_digest_reports_the_value_to_declare(

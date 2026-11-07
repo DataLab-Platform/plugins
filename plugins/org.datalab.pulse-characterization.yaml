@@ -5,5 +5,7 @@ icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-pulse-character
 capabilities: [application, processing]
 keywords: [pulse, transient, timing, stability]
 releases:
+  - version: 0.2.1
+    sha256: 51ec3ecf5f390ed4eaf785f949dd6da7bbac353f317d5c804f12ec8354d8db74
   - version: 0.2.0
     sha256: 24a45b6cf4bb67cbacab29288d91f943cd54f556f5db61d0554e69ccc723a53f

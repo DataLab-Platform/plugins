@@ -209,14 +209,15 @@ def _read_wheel_metadata(data: bytes) -> tuple[set[str], Message]:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             entry_points = _dist_info_file(archive, "entry_points.txt")
             metadata = _dist_info_file(archive, "METADATA") or b""
+    except wheels.ZIP_MEMBER_ERRORS as exc:
+        raise CatalogError(f"Cannot read wheel metadata: {exc}") from exc
+    try:
         parser = configparser.ConfigParser(interpolation=None)
         parser.optionxform = str
         parser.read_string((entry_points or b"").decode("utf-8"))
         groups = set(parser.sections())
-    except (zipfile.BadZipFile, configparser.Error, UnicodeDecodeError):
-        # Let the wheel inspection report what is wrong with the archive
-        groups = {wheels.DESKTOP_ENTRY_POINT_GROUP}
-        metadata = b""
+    except (configparser.Error, UnicodeDecodeError) as exc:
+        raise CatalogError(f"Invalid wheel entry points: {exc}") from exc
     return groups, BytesParser(policy=email_policy).parsebytes(metadata)
 
 
