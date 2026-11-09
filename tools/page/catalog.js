@@ -1,6 +1,20 @@
 "use strict";
 
 (() => {
+  // The tutorial is published with the DataLab documentation: its button is
+  // shown once the page is online, the other links remain otherwise
+  const tutorial = document.getElementById("tutorial-link");
+  if (tutorial) {
+    fetch(tutorial.href, { method: "HEAD" })
+      .then((response) => {
+        if (response.ok) {
+          tutorial.hidden = false;
+          document.getElementById("contributing-link")?.classList.remove("primary");
+        }
+      })
+      .catch(() => {});
+  }
+
   for (const image of document.querySelectorAll(".plugin-icon")) {
     const updateIcon = () => {
       image.hidden = image.naturalWidth === 0;
