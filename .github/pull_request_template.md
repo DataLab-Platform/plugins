@@ -11,4 +11,4 @@
 - [ ] The wheel declares a `datalab.plugins` and/or `datalab.web_plugins` entry point.
 - [ ] The wheel depends only on packages provided by DataLab, listed in `dependency_wheels`, or declared in `environment_requirements` (Desktop packages that users install in DataLab's Python environment).
 - [ ] The repository is public and the license is OSI-approved.
-- [ ] I tested the wheel with **Plugins > Configure plugins... > Install plugins** in DataLab.
+- [ ] I tested the plugin with **Plugins > Configure plugins... > From file** in DataLab.

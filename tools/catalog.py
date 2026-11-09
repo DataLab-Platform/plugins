@@ -53,6 +53,13 @@ ENTRIES_DIR = ROOT / "plugins"
 SCHEMA_PATH = ROOT / "schema" / "plugin-entry.schema.json"
 PAGE_DIR = ROOT / "tools" / "page"
 PAGE_ASSETS = ("style.css", "catalog.js", "logo.svg", "favicon.ico")
+SITE_URL = "https://datalab-platform.com/plugins/"
+DOCUMENTATION_URL = "https://datalab-platform.com/en/features/advanced/plugins.html"
+#: Image shown when the page is shared, also used by the DataLab documentation
+SOCIAL_IMAGE_URL = (
+    "https://raw.githubusercontent.com/DataLab-Platform/DataLab/main/"
+    "doc/images/DataLab-banner.png"
+)
 CONTRIBUTING_URL = (
     "https://github.com/DataLab-Platform/plugins/blob/main/CONTRIBUTING.md"
 )
@@ -656,6 +663,7 @@ def write_site(output: Path, catalog: dict, files: Mapping[str, bytes]) -> None:
     for name in PAGE_ASSETS:
         shutil.copy2(PAGE_DIR / name, output / name)
     (output / "index.html").write_text(render_index(catalog), encoding="utf-8")
+    (output / "sitemap.xml").write_text(render_sitemap(catalog), encoding="utf-8")
     (output / ".nojekyll").write_text("", encoding="utf-8")
 
 
@@ -824,10 +832,25 @@ def render_index(catalog: dict) -> str:
     return template.substitute(
         style_version=asset_versions["style.css"],
         script_version=asset_versions["catalog.js"],
+        site_url=SITE_URL,
+        image_url=SOCIAL_IMAGE_URL,
+        documentation_url=DOCUMENTATION_URL,
+        contributing_url=CONTRIBUTING_URL,
         cards=cards,
         count=_count_plugins(len(plugins)),
         updated=f"{generated:%Y-%m-%d %H:%M} UTC",
         updated_iso=html.escape(catalog["generated_at"]),
+    )
+
+
+def render_sitemap(catalog: dict) -> str:
+    """Return the sitemap of the catalog page, for search engines."""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"  <url><loc>{html.escape(SITE_URL)}</loc>"
+        f"<lastmod>{html.escape(catalog['generated_at'])}</lastmod></url>\n"
+        "</urlset>\n"
     )
 
 

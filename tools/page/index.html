@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Plugins for DataLab, checked and mirrored by the DataLab plugin catalog.">
 <title>DataLab plugins</title>
+<link rel="canonical" href="$site_url">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DataLab">
+<meta property="og:title" content="DataLab plugins">
+<meta property="og:description" content="Extend DataLab with plugins from the DataLab team and the community, or publish your own.">
+<meta property="og:url" content="$site_url">
+<meta property="og:image" content="$image_url">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.ico">
 <link rel="stylesheet" href="style.css?v=$style_version">
 <script src="catalog.js?v=$script_version" defer></script>
@@ -17,8 +25,9 @@
       <span>DataLab</span>
     </a>
     <nav aria-label="Catalog links">
-      <a href="https://datalab-platform.com/en/features/advanced/plugins.html">Plugin documentation</a>
-      <a href="https://github.com/DataLab-Platform/plugins/blob/main/CONTRIBUTING.md">Submit a plugin</a>
+      <a href="$documentation_url">Plugin documentation</a>
+      <a href="#create">Create a plugin</a>
+      <a href="$contributing_url">Submit a plugin</a>
     </nav>
   </div>
   <div class="wrap hero">
@@ -32,11 +41,11 @@
   <ol class="steps">
     <li>
       <strong>In DataLab 1.4 or later</strong>
-      <span>Open <b>Plugins &gt; Configure plugins...</b>, select the <b>Available plugins</b> tab and click <b>Install</b>. DataLab downloads the plugin and checks it against this catalog.</span>
+      <span>Open <b>Plugins &gt; Configure plugins...</b>, select the <b>Catalog</b> tab and click <b>Install</b>. DataLab downloads the plugin and checks it against this catalog.</span>
     </li>
     <li>
       <strong>From a downloaded file</strong>
-      <span>Download a wheel below, then click <b>Install from file...</b> in the <b>Install plugins</b> tab of the same dialog. This also works with the standalone version of DataLab.</span>
+      <span>Download a plugin below, then click <b>Install from file...</b> in the <b>From file</b> tab of the same dialog. This also works with the standalone version of DataLab.</span>
     </li>
   </ol>
   <p class="trust">Plugins run with the same rights as DataLab: install only plugins from authors you trust. <b>Official</b> plugins are maintained by the DataLab team, <b>community</b> plugins by their authors. Being listed here does not mean that a plugin was audited.</p>
@@ -59,7 +68,31 @@
   <p class="count" id="count" aria-live="polite">$count</p>
 $cards
   <p class="empty" id="no-match" hidden>No plugin matches your search.</p>
+  <p class="empty" id="no-community" hidden>No community plugin yet: <a href="#create">yours could be the first one</a>.</p>
 </main>
+
+<section class="wrap create" id="create" aria-labelledby="create-title">
+  <h2 id="create-title">Create your own plugin</h2>
+  <p class="lead">A plugin can be a single Python file. Publishing it takes a GitHub repository and one pull request: no PyPI account is needed.</p>
+  <ol class="steps">
+    <li>
+      <strong>Write it</strong>
+      <span>Run <code>datalab-plugin create</code>, installed with the DataLab Python package: it writes a ready-to-use plugin file. Edit it, then select <b>Plugins &gt; Reload plugins</b> in DataLab to try your changes.</span>
+    </li>
+    <li>
+      <strong>Release it</strong>
+      <span>Push the source to a public GitHub repository under an open-source license, and attach the plugin file (a <code>datalab_&lt;name&gt;.py</code> module or a wheel) to a GitHub release.</span>
+    </li>
+    <li>
+      <strong>List it</strong>
+      <span>Open a pull request adding one YAML file to the catalog repository. Once its automatic checks pass and it is merged, your plugin appears here and in the <b>Catalog</b> tab of DataLab.</span>
+    </li>
+  </ol>
+  <p class="actions">
+    <a class="button primary" href="$contributing_url">Read the contribution guide</a>
+    <a class="button" href="$documentation_url">Plugin documentation</a>
+  </p>
+</section>
 
 <footer class="site-footer">
   <div class="wrap">

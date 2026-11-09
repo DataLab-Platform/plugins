@@ -24,6 +24,8 @@
   const search = document.getElementById("search");
   const count = document.getElementById("count");
   const noMatch = document.getElementById("no-match");
+  const noCommunity = document.getElementById("no-community");
+  const hasCommunity = cards.some((card) => card.dataset.tier === "community");
   const filters = { tier: "", target: "" };
   const plugins = (n) => `${n} plugin${n === 1 ? "" : "s"}`;
 
@@ -40,7 +42,10 @@
     }
     count.textContent =
       shown === cards.length ? plugins(shown) : `${shown} of ${plugins(cards.length)}`;
-    noMatch.hidden = shown > 0;
+    // Invite authors rather than reporting a failed search
+    const inviteCommunity = filters.tier === "community" && !hasCommunity;
+    noCommunity.hidden = !inviteCommunity;
+    noMatch.hidden = shown > 0 || inviteCommunity;
   }
 
   const buttons = Array.from(toolbar.querySelectorAll("button[data-filter]"));
