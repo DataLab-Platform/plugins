@@ -876,9 +876,28 @@ def test_page_invites_authors_to_create_plugins() -> None:
     assert '<a href="#create">Create a plugin</a>' in page
     assert '<section class="wrap create" id="create"' in page
     assert "<code>datalab-plugin create</code>" in page
-    assert f'<a class="button primary" href="{catalog.CONTRIBUTING_URL}">' in page
+    assert (
+        f'<a class="button primary" id="contributing-link" '
+        f'href="{catalog.CONTRIBUTING_URL}">' in page
+    )
     assert f'<a class="button" href="{catalog.DOCUMENTATION_URL}">' in page
     assert '<p class="empty" id="no-community" hidden>' in page
+
+
+def test_page_hides_tutorial_link_until_published() -> None:
+    """The tutorial button is shown by the page script once the tutorial exists."""
+    page = catalog.render_index(
+        {"generated_at": "2026-10-08T13:29:23+00:00", "plugins": []}
+    )
+
+    assert (
+        f'<a class="button primary" id="tutorial-link" '
+        f'href="{catalog.TUTORIAL_URL}" hidden>Follow the tutorial</a>' in page
+    )
+    script = (catalog.PAGE_DIR / "catalog.js").read_text(encoding="utf-8")
+    assert 'getElementById("tutorial-link")' in script
+    # The check runs before the early return of the search code (empty catalog)
+    assert script.index("tutorial-link") < script.index("cards.length === 0")
 
 
 def test_page_declares_canonical_and_social_metadata() -> None:

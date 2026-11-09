@@ -55,6 +55,8 @@ PAGE_DIR = ROOT / "tools" / "page"
 PAGE_ASSETS = ("style.css", "catalog.js", "logo.svg", "favicon.ico")
 SITE_URL = "https://datalab-platform.com/plugins/"
 DOCUMENTATION_URL = "https://datalab-platform.com/en/features/advanced/plugins.html"
+#: Tutorial of the DataLab documentation: the page shows its link once it is online
+TUTORIAL_URL = "https://datalab-platform.com/en/intro/tutorials/plugin_catalog.html"
 #: Image shown when the page is shared, also used by the DataLab documentation
 SOCIAL_IMAGE_URL = (
     "https://raw.githubusercontent.com/DataLab-Platform/DataLab/main/"
@@ -835,6 +837,7 @@ def render_index(catalog: dict) -> str:
         site_url=SITE_URL,
         image_url=SOCIAL_IMAGE_URL,
         documentation_url=DOCUMENTATION_URL,
+        tutorial_url=TUTORIAL_URL,
         contributing_url=CONTRIBUTING_URL,
         cards=cards,
         count=_count_plugins(len(plugins)),
