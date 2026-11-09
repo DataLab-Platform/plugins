@@ -1,0 +1,10 @@
+id: org.datalab.tango
+name: "TANGO Instruments"
+repository: https://github.com/DataLab-Platform/datalab-tango
+icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-tango/develop/src/datalab_tango/icons/tango.svg
+capabilities: [application]
+keywords: [TANGO, instrument, acquisition, PyTango]
+environment_requirements: [pytango]
+releases:
+  - version: 0.1.0
+    sha256: 1339772df14c13aad5d74c0257fe7711e143e0a340beb4cee0f7fb14d21c49b3
