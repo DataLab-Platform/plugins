@@ -407,6 +407,11 @@ main.wrap {
   font-weight: 500;
 }
 
+.notice.requirements {
+  background: var(--chip);
+  color: var(--chip-text);
+}
+
 .summary {
   margin: 0;
 }
