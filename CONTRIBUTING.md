@@ -2,6 +2,8 @@
 
 Listing a plugin takes a public GitHub repository, a GitHub release holding a wheel or a single Python file, and a pull request adding one YAML entry. No PyPI account is needed. Single-file artifacts are supported by the updated Desktop client only, not DataLab-Web.
 
+New to plugin development? Run `datalab-plugin create`, installed with the DataLab Python package: it writes a ready-to-use single-file plugin that you can list as it is. The [plugin documentation](https://datalab-platform.com/en/features/advanced/plugins.html) describes the plugin API, the generator and the examples.
+
 ## Requirements
 
 - The source code is public on GitHub and licensed under an OSI-approved license. A wheel declares its license in its metadata (`license = "..."` in `pyproject.toml` with setuptools 77 or later); a module declares its SPDX license identifier in the catalog entry and must have corresponding source licensing. Accepted licenses: 0BSD, AFL-3.0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CECILL-2.1, EPL-2.0, EUPL-1.2, GPL-2.0 and 3.0, ISC, LGPL-2.1 and 3.0, MIT, MPL-2.0, PSF-2.0, Unlicense, Zlib.

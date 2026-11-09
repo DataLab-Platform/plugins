@@ -195,6 +195,10 @@ a {
   color: var(--muted);
 }
 
+.steps code {
+  font-size: 0.9em;
+}
+
 .trust {
   margin: 1rem 0 0;
   padding: 0.75rem 1rem;
@@ -266,6 +270,28 @@ main.wrap {
   background: var(--surface);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
+}
+
+/* Call for contributions */
+
+.create {
+  padding-bottom: 3rem;
+  scroll-margin-top: 1rem;
+}
+
+.create h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.5rem;
+}
+
+.create .lead {
+  max-width: 46rem;
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+}
+
+.create .actions {
+  margin: 1.25rem 0 0;
 }
 
 /* Plugin cards */

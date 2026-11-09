@@ -855,6 +855,60 @@ def test_empty_catalog_page_invites_submissions() -> None:
     assert 'class="card"' not in page
 
 
+def test_page_names_the_plugin_dialog_tabs() -> None:
+    """Installation steps use the tab names of DataLab's plugin dialog."""
+    page = catalog.render_index(
+        {"generated_at": "2026-10-08T13:29:23+00:00", "plugins": []}
+    )
+
+    assert "<b>Catalog</b> tab" in page
+    assert "<b>From file</b> tab" in page
+    assert "Available plugins" not in page
+    assert "Install plugins" not in page
+
+
+def test_page_invites_authors_to_create_plugins() -> None:
+    """The page explains how to create, release and list a plugin."""
+    page = catalog.render_index(
+        {"generated_at": "2026-10-08T13:29:23+00:00", "plugins": []}
+    )
+
+    assert '<a href="#create">Create a plugin</a>' in page
+    assert '<section class="wrap create" id="create"' in page
+    assert "<code>datalab-plugin create</code>" in page
+    assert f'<a class="button primary" href="{catalog.CONTRIBUTING_URL}">' in page
+    assert f'<a class="button" href="{catalog.DOCUMENTATION_URL}">' in page
+    assert '<p class="empty" id="no-community" hidden>' in page
+
+
+def test_page_declares_canonical_and_social_metadata() -> None:
+    """Shared links show a title, a description and an image."""
+    page = catalog.render_index(
+        {"generated_at": "2026-10-08T13:29:23+00:00", "plugins": []}
+    )
+
+    assert f'<link rel="canonical" href="{catalog.SITE_URL}">' in page
+    assert f'<meta property="og:url" content="{catalog.SITE_URL}">' in page
+    assert f'<meta property="og:image" content="{catalog.SOCIAL_IMAGE_URL}">' in page
+    assert '<meta property="og:title" content="DataLab plugins">' in page
+    assert '<meta name="twitter:card" content="summary_large_image">' in page
+    assert "$" not in page
+
+
+def test_site_includes_sitemap(tmp_path: Path) -> None:
+    """The published site lists the catalog page for search engines."""
+    generated_at = "2026-10-08T13:29:23+00:00"
+    catalog.write_site(tmp_path, {"generated_at": generated_at, "plugins": []}, {})
+
+    sitemap = (tmp_path / "sitemap.xml").read_text("utf-8")
+    assert sitemap.startswith('<?xml version="1.0" encoding="UTF-8"?>\n')
+    assert (
+        f"<url><loc>{catalog.SITE_URL}</loc><lastmod>{generated_at}</lastmod></url>"
+        in sitemap
+    )
+    assert (tmp_path / "index.html").is_file()
+
+
 @pytest.mark.parametrize("asset", ["style.css", "catalog.js"])
 def test_page_versions_assets_by_content(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, asset: str
