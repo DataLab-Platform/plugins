@@ -8,7 +8,9 @@ Usage::
     python tools/catalog.py build -o site     # catalog.json, mirrored wheels, index
 
 Dependencies of plugin wheels are checked against the distributions installed
-in the running environment: install the latest DataLab release first.
+in the running environment: install the latest DataLab release first. Desktop
+dependencies may also come from reviewed dependency wheels, or be declared as
+environment requirements that users install in DataLab's Python environment.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ from typing import Any
 
 import jsonschema
 import yaml
+from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
@@ -248,6 +251,29 @@ def _check_license(metadata: Message, label: str) -> str:
     raise CatalogError(f"{label}: the wheel declares no License-Expression metadata")
 
 
+def _requirement_name(requirement: str) -> str:
+    """Return the canonical distribution name of a requirement string."""
+    return canonicalize_name(Requirement(requirement).name)
+
+
+def _check_missing_requirements(manifest: dict, environment: frozenset[str]) -> None:
+    """Refuse missing Desktop requirements that are not environment requirements.
+
+    Incompatible installed versions were already refused by the inspection.
+    """
+    for dependency in manifest["dependencies"]:
+        if not dependency["applies"] or dependency["compatible"]:
+            continue
+        requirement = dependency["requirement"]
+        if _requirement_name(requirement) not in environment:
+            raise wheels.WheelInspectionError(
+                f"Plugin dependency {requirement} is not provided by DataLab: list "
+                "its wheels in dependency_wheels, or its name in "
+                "environment_requirements if users install it in DataLab's Python "
+                "environment (see CONTRIBUTING.md)"
+            )
+
+
 def _inspect_for_target(
     data: bytes,
     filename: str,
@@ -255,12 +281,25 @@ def _inspect_for_target(
     group: str,
     available: Mapping[str, str],
     additional_distributions: Mapping[str, Sequence[str]] | None = None,
+    environment: frozenset[str] = frozenset(),
 ) -> dict:
-    """Inspect a wheel with the first Python version of a target that accepts it."""
+    """Inspect a wheel with the first Python version of a target that accepts it.
+
+    Args:
+        data: Wheel content
+        filename: Wheel file name
+        target: Host (``desktop`` or ``web``)
+        group: Plugin entry-point group of the target
+        available: Distribution versions provided by DataLab
+        additional_distributions: Versions provided by dependency wheels
+        environment: Canonical names of the environment requirements, which
+         may be missing from DataLab (Desktop only)
+    """
     pythons = TARGET_PYTHONS[target]
+    desktop = target == "desktop"
     for python_version in pythons:
         try:
-            return wheels.inspect_wheel(
+            manifest = wheels.inspect_wheel(
                 data,
                 filename=filename,
                 entry_point_group=group,
@@ -271,7 +310,11 @@ def _inspect_for_target(
                     "python_version": python_version,
                     "python_full_version": f"{python_version}.0",
                 },
+                allow_missing_dependencies=desktop,
             )
+            if desktop:
+                _check_missing_requirements(manifest, environment)
+            return manifest
         except wheels.WheelInspectionError as exc:
             error = exc
     raise CatalogError(f"{error} ({target}, Python {', '.join(pythons)})")
@@ -330,6 +373,9 @@ def check_release(
         Release record, package information, plugin bytes and dependency files
     """
     label = f"{entry['id']} {release['version']}"
+    environment = frozenset(
+        canonicalize_name(name) for name in entry.get("environment_requirements", ())
+    )
     filename, url = resolve_wheel(entry, release)
     data = fetch(url)
     digest = hashlib.sha256(data).hexdigest()
@@ -389,6 +435,12 @@ def check_release(
     dependency_records, dependency_files, dependency_versions = check_dependency_wheels(
         release
     )
+    overlap = environment.intersection(dependency_versions)
+    if overlap:
+        raise CatalogError(
+            f"{label}: {', '.join(sorted(overlap))} cannot be both an environment "
+            "requirement and a dependency wheel"
+        )
     manifests: dict[str, dict] = {}
     try:
         for target, group in TARGET_GROUPS:
@@ -400,6 +452,7 @@ def check_release(
                     group,
                     available,
                     dependency_versions if target == "desktop" else None,
+                    environment if target == "desktop" else frozenset(),
                 )
     except CatalogError as exc:
         raise CatalogError(f"{label}: {exc}") from exc
@@ -432,6 +485,16 @@ def check_release(
         record["yanked"] = release["yanked"]
     if dependency_records:
         record["dependency_wheels"] = dependency_records
+    if "desktop" in manifests:
+        provided = {canonicalize_name(name) for name in available}
+        # Markers are published unevaluated: DataLab evaluates them on its host
+        requirements = [
+            dependency["requirement"]
+            for dependency in manifests["desktop"]["dependencies"]
+            if _requirement_name(dependency["requirement"]) in environment - provided
+        ]
+        if requirements:
+            record["environment_requirements"] = requirements
     package = {
         "distribution": manifest["distribution"],
         "summary": manifest["summary"],
@@ -485,6 +548,7 @@ def check_entry(
 
     records: list[tuple[Version, dict, dict]] = []
     files: dict[str, bytes] = {}
+    required: set[str] = set()
     for release in entry["releases"]:
         record, package, data, dependency_files = check_release(
             entry, release, available
@@ -492,6 +556,20 @@ def check_entry(
         records.append((Version(record["version"]), record, package))
         files[record["url"]] = data
         files.update(dependency_files)
+        if "desktop" in record.get("targets", ()):
+            required.update(
+                _requirement_name(requirement)
+                for requirement in record.get("requires_dist", ())
+            )
+    unused = sorted(
+        {canonicalize_name(name) for name in entry.get("environment_requirements", ())}
+        - required
+    )
+    if unused:
+        raise CatalogError(
+            f"{path.name}: environment requirements not required by any Desktop "
+            f"release: {', '.join(unused)}"
+        )
     records.sort(key=lambda item: item[0], reverse=True)
     distributions = {
         canonicalize_name(package["distribution"])
@@ -605,13 +683,22 @@ def _render_card(plugin: dict) -> str:
     ]
     latest = installable[0] if installable and status != "revoked" else None
     targets = latest["targets"] if latest else []
+    requirements = latest.get("environment_requirements", []) if latest else []
     capabilities = [
         CAPABILITY_LABELS.get(name, name) for name in plugin.get("capabilities", [])
     ]
     keywords = plugin.get("keywords", [])
     summary = plugin.get("summary", "")
     searchable = " ".join(
-        [plugin["name"], plugin["id"], summary, *keywords, *capabilities, *targets]
+        [
+            plugin["name"],
+            plugin["id"],
+            summary,
+            *keywords,
+            *capabilities,
+            *targets,
+            *requirements,
+        ]
     ).lower()
     words = [word for word in plugin["name"].split() if word[:1].isalnum()]
     initials = "".join(word[0] for word in words[:2]).upper() or "?"
@@ -644,6 +731,13 @@ def _render_card(plugin: dict) -> str:
         )
     if summary:
         body.append(f'<p class="summary">{esc(summary)}</p>')
+    if requirements:
+        items = ", ".join(f"<code>{esc(item)}</code>" for item in requirements)
+        body.append(
+            f'<p class="notice requirements">Requires {items} in the Python '
+            "environment of DataLab: not installable in the standalone "
+            "application.</p>"
+        )
     if keywords:
         items = "".join(f"<li>{esc(keyword)}</li>" for keyword in keywords)
         body.append(f'<ul class="keywords" aria-label="Keywords">{items}</ul>')

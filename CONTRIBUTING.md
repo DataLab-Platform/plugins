@@ -7,7 +7,7 @@ Listing a plugin takes a public GitHub repository, a GitHub release holding a wh
 - The source code is public on GitHub and licensed under an OSI-approved license. A wheel declares its license in its metadata (`license = "..."` in `pyproject.toml` with setuptools 77 or later); a module declares its SPDX license identifier in the catalog entry and must have corresponding source licensing. Accepted licenses: 0BSD, AFL-3.0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CECILL-2.1, EPL-2.0, EUPL-1.2, GPL-2.0 and 3.0, ISC, LGPL-2.1 and 3.0, MIT, MPL-2.0, PSF-2.0, Unlicense, Zlib.
 - The artifact is either a pure-Python wheel (`*-py3-none-any.whl`) or one importable `datalab_<name>.py` source file (maximum 4 MiB), without compiled plugin code.
 - A wheel declares its plugin class in the `datalab.plugins` (Desktop) and/or `datalab.web_plugins` (Web) entry-point group. A module uses Desktop's existing file-name convention and plugin API; it does not need an entry-point file or packaging metadata.
-- Its requirements must be satisfied by DataLab (for example `datalab-platform`, `sigima`, `numpy`, `scipy`) or, for Desktop, by explicitly listed dependency wheels. Existing host package versions cannot be replaced. Additional wheels may contain native libraries but must cover the intended Python/ABI/platform; no compilation or system installation is performed. Web requirements remain restricted to packages supplied by the Web host.
+- Its requirements must be satisfied by DataLab (for example `datalab-platform`, `sigima`, `numpy`, `scipy`) or, for Desktop, by explicitly listed dependency wheels or by packages that users install in DataLab's Python environment (see [Packages required in the Python environment](#packages-required-in-the-python-environment)). Existing host package versions cannot be replaced. Additional wheels may contain native libraries but must cover the intended Python/ABI/platform; no compilation or system installation is performed. Web requirements remain restricted to packages supplied by the Web host.
 - The entry's ID agrees with a statically readable `PluginInfo.id` when present. For an unchanged historical module with unavailable metadata or several plugin classes, the entry identifies the entire module without rewriting its runtime identities. Prefer a reverse-domain name that you control, such as `io.github.<your-account>.<plugin>`. The `org.datalab.` prefix is reserved for DataLab-Platform plugins.
 
 The generators `datalab-plugin create` and `create --project` provide a starting point for the two source forms. Catalog metadata must still be supplied when it is not in the artifact.
@@ -60,6 +60,18 @@ releases:
 ```
 
 The CI checks and mirrors these artifacts without executing them. The Desktop client downloads only compatible wheel tags, verifies the files, and resolves against its actual host using the local wheelhouse only. A missing transitive artifact or version conflict causes a refusal, not an implicit download from PyPI. Prepare and include wheels for each intended environment; do not assume that one native wheel supports all desktop installations. Respect the redistribution, license-notice and corresponding-source obligations of every dependency.
+
+## Packages required in the Python environment
+
+A Desktop plugin may instead rely on packages that its users install themselves in DataLab's Python environment, for example a large native library installed with pip or conda. Declare their distribution names once, at the plugin level:
+
+```yaml
+environment_requirements: [pytango]
+```
+
+Nothing is mirrored or downloaded for these packages. The CI accepts these requirements when DataLab does not provide them, still refuses an incompatible version provided by DataLab, and publishes the corresponding requirements of each release, with their version constraints and environment markers. The catalog page and DataLab show them, and DataLab refuses the installation until they are installed in its environment. The standalone application cannot install additional packages in its environment: such plugins are not installable there.
+
+Use dependency wheels instead when the plugin must also be installable in the standalone application or without Internet access. A package cannot be both an environment requirement and a dependency wheel of the same release. Every declared name must be a requirement of at least one Desktop release, and environment requirements cannot be declared by single-file modules or used by DataLab-Web.
 
 ## Submitting a plugin
 

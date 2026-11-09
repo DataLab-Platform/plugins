@@ -555,6 +555,175 @@ releases:
         catalog.build_catalog(entries, HOST)
 
 
+DESKTOP_ONLY = "[datalab.plugins]\nexample = example_plugin.desktop:ExamplePlugin\n"
+
+
+def environment_entry(
+    served: dict,
+    tmp_path: Path,
+    names: str,
+    requires: tuple[str, ...],
+    *,
+    entry_points: str = DESKTOP_ONLY,
+    extra: str = "",
+) -> Path:
+    """Publish a plugin release and write an entry with environment requirements."""
+    repository = "https://github.com/someone/example-plugin"
+    digest = publish_on_github(
+        served,
+        repository,
+        "v1.0.0",
+        make_wheel(entry_points=entry_points, requires=requires),
+    )
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        "io.github.someone.example",
+        f"""id: io.github.someone.example
+name: Example
+repository: {repository}
+environment_requirements: {names}
+releases:
+  - version: 1.0.0
+    sha256: {digest}
+{extra}""",
+    )
+    return entries
+
+
+def test_environment_requirements_are_published_without_artifacts(
+    served: dict, tmp_path: Path
+) -> None:
+    """Packages installed by users in DataLab's environment are only described."""
+    entries = environment_entry(
+        served,
+        tmp_path,
+        "[PyTango, numpy, helper]",
+        (
+            "datalab-platform>=1.4",
+            "PyTango>=9.5.1",
+            "numpy>=1.22",
+            'helper>=1; python_version >= "4"',
+        ),
+    )
+    site = tmp_path / "site"
+    (plugin,) = catalog.build_catalog(entries, HOST, site)["plugins"]
+    (release,) = plugin["releases"]
+    assert release["targets"] == ["desktop"]
+    # numpy is provided by DataLab; markers are left to the Desktop client
+    assert release["environment_requirements"] == [
+        "PyTango>=9.5.1",
+        'helper>=1; python_version >= "4"',
+    ]
+    assert "dependency_wheels" not in release
+    assert sorted(path.name for path in (site / "wheels").iterdir()) == [
+        release["sha256"]
+    ]
+    page = (site / "index.html").read_text("utf-8")
+    assert (
+        '<p class="notice requirements">Requires <code>PyTango&gt;=9.5.1</code>, '
+        "<code>helper&gt;=1; python_version &gt;= &quot;4&quot;</code> in the Python "
+        "environment of DataLab: not installable in the standalone application.</p>"
+    ) in page
+    assert "pytango&gt;=9.5.1" in page.split('data-search="', 1)[1].split('"', 1)[0]
+
+    from datalab.plugins.catalog import read_folder_catalog
+
+    (offline,), warnings = read_folder_catalog(str(site))
+    assert not warnings
+    assert offline.get_installable_release(python_version="3.11").version == "1.0.0"
+
+
+def test_entries_without_environment_requirements_are_unchanged(
+    served: dict, tmp_path: Path
+) -> None:
+    """Satisfied entries publish no requirement and keep their page."""
+    repository = "https://github.com/someone/example-plugin"
+    digest = publish_on_github(served, repository, "v1.0.0", make_wheel())
+    entries = tmp_path / "plugins"
+    write_entry(
+        entries,
+        "io.github.someone.example",
+        f"id: io.github.someone.example\nname: Example\nrepository: {repository}\n"
+        f"releases:\n  - version: 1.0.0\n    sha256: {digest}\n",
+    )
+    site = tmp_path / "site"
+    (plugin,) = catalog.build_catalog(entries, HOST, site)["plugins"]
+    assert "environment_requirements" not in plugin["releases"][0]
+    assert "notice requirements" not in (site / "index.html").read_text("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("names", "requires", "entry_points", "error"),
+    [
+        (
+            "[other]",
+            ("pytango>=9.5.1", "other>=1"),
+            DESKTOP_ONLY,
+            "pytango>=9.5.1 is not provided by DataLab: list its wheels in "
+            "dependency_wheels, or its name in environment_requirements",
+        ),
+        ("[numpy]", ("numpy>=3",), DESKTOP_ONLY, "incompatible installed version"),
+        (
+            "[pytango, astropy]",
+            ("pytango>=9.5.1",),
+            DESKTOP_ONLY,
+            "not required by any Desktop release: astropy",
+        ),
+        (
+            "[pytango]",
+            ("pytango>=9.5.1",),
+            DESKTOP_AND_WEB,
+            r"pytango>=9.5.1 is not provided by DataLab \(web, Python 3.12\)",
+        ),
+        (
+            "[pytango]",
+            ("datalab-platform>=1.4",),
+            "[datalab.web_plugins]\nexample = example_plugin.web:ExampleWebPlugin\n",
+            "not required by any Desktop release: pytango",
+        ),
+    ],
+)
+def test_environment_requirements_misuse_is_refused(
+    served: dict,
+    tmp_path: Path,
+    names: str,
+    requires: tuple[str, ...],
+    entry_points: str,
+    error: str,
+) -> None:
+    """Only missing Desktop requirements may be declared, and must be."""
+    entries = environment_entry(
+        served, tmp_path, names, requires, entry_points=entry_points
+    )
+    with pytest.raises(catalog.CatalogError, match=error):
+        catalog.build_catalog(entries, HOST)
+
+
+def test_environment_requirement_cannot_be_a_dependency_wheel(
+    served: dict, tmp_path: Path
+) -> None:
+    """A package comes either from the environment or from reviewed wheels."""
+    dependency_name, dependency_bytes = make_wheel(
+        "additional-helper", package="additional_helper", entry_points="", requires=()
+    )
+    dependency_url = f"https://files.example.test/{dependency_name}"
+    served[dependency_url] = dependency_bytes
+    entries = environment_entry(
+        served,
+        tmp_path,
+        "[Additional_Helper]",
+        ("additional-helper>=1",),
+        extra=f"""    dependency_wheels:
+      - filename: {dependency_name}
+        url: {dependency_url}
+        sha256: {hashlib.sha256(dependency_bytes).hexdigest()}
+""",
+    )
+    with pytest.raises(catalog.CatalogError, match="cannot be both"):
+        catalog.build_catalog(entries, HOST)
+
+
 def test_reserved_ids_require_a_datalab_platform_repository(
     served: dict, tmp_path: Path
 ) -> None:
@@ -735,6 +904,21 @@ def test_page_versions_assets_by_content(
             "repository: https://github.com/someone/example\nstatus: deprecated\n"
             "releases:\n  - version: 1.0.0\n",
             "status_reason",
+        ),
+        (
+            "id: io.github.someone.example\nname: Example\n"
+            "repository: https://github.com/someone/example\n"
+            "environment_requirements: [pytango>=9.5.1]\n"
+            "releases:\n  - version: 1.0.0\n",
+            "environment_requirements/0",
+        ),
+        (
+            "id: io.github.someone.example\nname: Example\nkind: module\n"
+            "summary: Example\nlicense: MIT\n"
+            "repository: https://github.com/someone/example\n"
+            "environment_requirements: [pytango]\n"
+            "releases:\n  - version: 1.0.0\n    filename: datalab_example.py\n",
+            "environment_requirements: .* is expected to be empty",
         ),
     ],
 )

@@ -55,6 +55,16 @@
       "enum": ["active", "deprecated", "revoked"]
     },
     "status_reason": {"type": "string", "minLength": 1},
+    "environment_requirements": {
+      "description": "Distributions that users install in DataLab's Python environment themselves (Desktop only): they are neither mirrored nor downloaded, so the plugin cannot be installed in the standalone application.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+      }
+    },
     "releases": {
       "type": "array",
       "minItems": 1,
@@ -67,6 +77,7 @@
       "then": {
         "required": ["summary", "license"],
         "properties": {
+          "environment_requirements": {"maxItems": 0},
           "releases": {
             "items": {
               "required": ["filename"],
