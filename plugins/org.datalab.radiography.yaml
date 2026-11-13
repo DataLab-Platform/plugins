@@ -1,0 +1,13 @@
+id: org.datalab.radiography
+name: "X-ray Radiography & NDT"
+repository: https://github.com/DataLab-Platform/datalab-radiography
+icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-radiography/develop/src/datalab_radiography/icons/radiography.svg
+capabilities: [application, processing, visualization]
+keywords: [radiography, x-ray, ndt, magnification, dicom, image quality]
+releases:
+  - version: 0.1.0
+    sha256: a3033ac198fc5cb322c95a5250260b4d36ef4a6d65451f1c05d9aeb20a71d287
+    dependency_wheels:
+      - filename: pydicom-3.0.2-py3-none-any.whl
+        url: https://files.pythonhosted.org/packages/46/e0/60466c6d712dad2cf807df315e39863e91609ffd1064ecb835994460bbda/pydicom-3.0.2-py3-none-any.whl
+        sha256: abf971a5440f84dbaf42c4b6758e30e62480902584f8b270b9a5d146e278a07b

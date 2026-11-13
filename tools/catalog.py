@@ -88,6 +88,12 @@ TARGET_PYTHONS = {
     # Python of the Pyodide release used by DataLab-Web (Pyodide 0.26)
     "web": ("3.12",),
 }
+#: Environment markers of a target other than those of the running Python:
+#: DataLab-Web runs plugins in Pyodide, whose platform is Emscripten, so that
+#: dependencies excluded with ``sys_platform != "emscripten"`` do not apply
+TARGET_MARKERS = {
+    "web": {"sys_platform": "emscripten", "platform_system": "Emscripten"},
+}
 #: OSI-approved licenses accepted in the catalog (SPDX identifiers)
 ALLOWED_LICENSES = frozenset(
     {
@@ -318,6 +324,7 @@ def _inspect_for_target(
                 marker_environment={
                     "python_version": python_version,
                     "python_full_version": f"{python_version}.0",
+                    **TARGET_MARKERS.get(target, {}),
                 },
                 allow_missing_dependencies=desktop,
             )

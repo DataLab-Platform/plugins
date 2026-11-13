@@ -98,6 +98,28 @@ def write_entry(directory: Path, plugin_id: str, text: str) -> Path:
     return path
 
 
+def test_web_target_evaluates_markers_for_emscripten() -> None:
+    """Dependencies excluded from Pyodide do not apply to the web target."""
+    requirement = 'desktoponly>=1; sys_platform != "emscripten"'
+    filename, data = make_wheel(requires=("datalab-platform>=1.4", requirement))
+    manifest = catalog._inspect_for_target(  # pylint: disable=protected-access
+        data, filename, "web", catalog.wheels.WEB_ENTRY_POINT_GROUP, HOST
+    )
+    dependency = next(
+        item
+        for item in manifest["dependencies"]
+        if "desktoponly" in item["requirement"]
+    )
+    assert dependency["applies"] is False
+    with pytest.raises(catalog.CatalogError, match="desktoponly"):
+        filename, data = make_wheel(
+            requires=("datalab-platform>=1.4", "desktoponly>=1")
+        )
+        catalog._inspect_for_target(  # pylint: disable=protected-access
+            data, filename, "web", catalog.wheels.WEB_ENTRY_POINT_GROUP, HOST
+        )
+
+
 @pytest.mark.parametrize("icon", [None, "https://images.example.test/icon"])
 def test_github_release_is_mirrored_in_the_published_catalog(
     served: dict, tmp_path: Path, icon: str | None
