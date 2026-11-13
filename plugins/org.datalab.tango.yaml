@@ -6,5 +6,7 @@ capabilities: [application]
 keywords: [TANGO, instrument, acquisition, PyTango]
 environment_requirements: [pytango]
 releases:
+  - version: 0.1.1
+    sha256: 7ebec5d0d64adbbd51005e7e278ed971d8ad20d9080cb935425139410804cd6b
   - version: 0.1.0
     sha256: 1339772df14c13aad5d74c0257fe7711e143e0a340beb4cee0f7fb14d21c49b3
