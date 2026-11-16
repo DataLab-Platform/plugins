@@ -1,0 +1,8 @@
+id: org.datalab.showcase
+name: "DataLab Showcase"
+repository: https://github.com/DataLab-Platform/datalab-showcase
+icon: https://raw.githubusercontent.com/DataLab-Platform/datalab-showcase/develop/src/datalab_showcase/icons/showcase.svg
+keywords: [showcase, demo, kiosk, exhibition]
+releases:
+  - version: 0.1.0
+    sha256: 5eb622d8233aafc53c177aa1254b80de42d9814b80907832daa7608a55a3f0ac
