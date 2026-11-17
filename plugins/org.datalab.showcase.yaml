@@ -6,3 +6,5 @@ keywords: [showcase, demo, kiosk, exhibition]
 releases:
   - version: 0.1.0
     sha256: 5eb622d8233aafc53c177aa1254b80de42d9814b80907832daa7608a55a3f0ac
+  - version: 0.2.0
+    sha256: 8734a244df38a87cb4b2a323bacef5a4323f957ca278517fe05c806969ffbb1b
